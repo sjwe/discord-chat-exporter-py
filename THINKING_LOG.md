@@ -359,3 +359,15 @@ Ran a parallel three-way review (security, performance, test coverage) across al
 
 - Created `REVIEW.md` with all 23 findings, organized by severity, with file:line references and fix recommendations.
 - Created `README.md` with installation, usage (all CLI commands), export formats, path templating, filter DSL syntax, development setup, and project structure.
+
+### GitHub Issues Filed
+
+Created all 23 issues on GitHub (`sjwe/discord-chat-exporter-py`) with severity and category labels:
+
+- **Labels created:** `critical`, `high`, `medium`, `low`, `security`, `performance`, `testing`
+- **Issues #1-#3:** Critical (XSS autoescaping, unrestricted asset downloads, test coverage)
+- **Issues #4-#10:** High (ReDoS, token exposure, unbounded cache, HTTP client reuse, concurrent downloads, sync I/O, path traversal)
+- **Issues #11-#19:** Medium (CSV injection, eager regex, JSON indentation, template caching, API consistency, filter limits, integration tests, model tests, emoji escaping)
+- **Issues #20-#23:** Low (date formatting, token detection, unused aiofiles dep, context managers)
+
+Each issue includes affected file paths, attack scenarios where applicable, and concrete fix recommendations with code examples.
