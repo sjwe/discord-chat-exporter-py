@@ -614,68 +614,83 @@ def _mk_timestamp() -> _Matcher:
 # node matcher (for recursive parsing). We solve this by creating the
 # individual matchers lazily and building the aggregate at module init.
 
-_BOLD_MATCHER = _mk_bold()
-_UNDERLINE_MATCHER = _mk_underline()
+_matchers_initialized = False
+# Forward declarations - populated by _init_matchers()
+_BOLD_MATCHER: _Matcher
+_UNDERLINE_MATCHER: _Matcher
+_NODE_MATCHER: _Matcher
+_MINIMAL_NODE_MATCHER: _Matcher
 
-# Full node matcher (all matchers in priority order)
-_NODE_MATCHER = _aggregate_matcher(
-    [
-        # Escaped text
-        _mk_shrug_text(),
-        _mk_ignored_emoji_text(),
-        _mk_escaped_symbol_text(),
-        _mk_escaped_character_text(),
-        # Formatting (most specific first)
-        _mk_italic_bold(),
-        _mk_italic_underline(),
-        _mk_bold(),
-        _mk_italic(),
-        _mk_underline(),
-        _mk_italic_alt(),
-        _mk_strikethrough(),
-        _mk_spoiler(),
-        _mk_multi_line_quote(),
-        _mk_repeated_single_line_quote(),
-        _mk_single_line_quote(),
-        _mk_heading(),
-        _mk_list(),
-        # Code blocks
-        _mk_multi_line_code_block(),
-        _mk_inline_code_block(),
-        # Mentions
-        _mk_everyone_mention(),
-        _mk_here_mention(),
-        _mk_user_mention(),
-        _mk_channel_mention(),
-        _mk_role_mention(),
-        # Links
-        _mk_masked_link(),
-        _mk_auto_link(),
-        _mk_hidden_link(),
-        # Emoji
-        _mk_standard_emoji(),
-        _mk_custom_emoji(),
-        _mk_coded_standard_emoji(),
-        # Misc
-        _mk_timestamp(),
-    ]
-)
 
-# Minimal matcher (for plain-text / non-multimedia formats)
-_MINIMAL_NODE_MATCHER = _aggregate_matcher(
-    [
-        # Mentions
-        _mk_everyone_mention(),
-        _mk_here_mention(),
-        _mk_user_mention(),
-        _mk_channel_mention(),
-        _mk_role_mention(),
-        # Emoji
-        _mk_custom_emoji(),
-        # Misc
-        _mk_timestamp(),
-    ]
-)
+def _init_matchers() -> None:
+    """Lazily initialize all matchers on first use."""
+    global _matchers_initialized, _BOLD_MATCHER, _UNDERLINE_MATCHER
+    global _NODE_MATCHER, _MINIMAL_NODE_MATCHER
+
+    if _matchers_initialized:
+        return
+    _matchers_initialized = True
+
+    _BOLD_MATCHER = _mk_bold()
+    _UNDERLINE_MATCHER = _mk_underline()
+
+    _NODE_MATCHER = _aggregate_matcher(
+        [
+            # Escaped text
+            _mk_shrug_text(),
+            _mk_ignored_emoji_text(),
+            _mk_escaped_symbol_text(),
+            _mk_escaped_character_text(),
+            # Formatting (most specific first)
+            _mk_italic_bold(),
+            _mk_italic_underline(),
+            _mk_bold(),
+            _mk_italic(),
+            _mk_underline(),
+            _mk_italic_alt(),
+            _mk_strikethrough(),
+            _mk_spoiler(),
+            _mk_multi_line_quote(),
+            _mk_repeated_single_line_quote(),
+            _mk_single_line_quote(),
+            _mk_heading(),
+            _mk_list(),
+            # Code blocks
+            _mk_multi_line_code_block(),
+            _mk_inline_code_block(),
+            # Mentions
+            _mk_everyone_mention(),
+            _mk_here_mention(),
+            _mk_user_mention(),
+            _mk_channel_mention(),
+            _mk_role_mention(),
+            # Links
+            _mk_masked_link(),
+            _mk_auto_link(),
+            _mk_hidden_link(),
+            # Emoji
+            _mk_standard_emoji(),
+            _mk_custom_emoji(),
+            _mk_coded_standard_emoji(),
+            # Misc
+            _mk_timestamp(),
+        ]
+    )
+
+    _MINIMAL_NODE_MATCHER = _aggregate_matcher(
+        [
+            # Mentions
+            _mk_everyone_mention(),
+            _mk_here_mention(),
+            _mk_user_mention(),
+            _mk_channel_mention(),
+            _mk_role_mention(),
+            # Emoji
+            _mk_custom_emoji(),
+            # Misc
+            _mk_timestamp(),
+        ]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -685,12 +700,14 @@ _MINIMAL_NODE_MATCHER = _aggregate_matcher(
 
 def parse(markdown: str) -> list[MarkdownNode]:
     """Parse Discord markdown text into an AST (full formatting)."""
+    _init_matchers()
     segment = _Segment(markdown, 0, len(markdown))
     return _parse(0, segment, _NODE_MATCHER)
 
 
 def parse_minimal(markdown: str) -> list[MarkdownNode]:
     """Parse Discord markdown text into an AST (minimal - mentions, emoji, timestamps only)."""
+    _init_matchers()
     segment = _Segment(markdown, 0, len(markdown))
     return _parse(0, segment, _MINIMAL_NODE_MATCHER)
 

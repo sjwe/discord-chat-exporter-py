@@ -148,9 +148,9 @@ class HtmlMarkdownVisitor(MarkdownVisitor):
         self._buffer.write(
             f'<img loading="lazy" '
             f'class="chatlog__emoji {jumbo_class}" '
-            f'alt="{node.name}" '
-            f'title="{node.code}" '
-            f'src="{image_url}">'
+            f'alt="{_html_encode(node.name)}" '
+            f'title="{_html_encode(node.code)}" '
+            f'src="{_html_encode(image_url)}">'
         )
 
     # -- mentions --

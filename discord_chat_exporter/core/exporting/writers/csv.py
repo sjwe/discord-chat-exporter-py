@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 
 
 def _csv_encode(value: str) -> str:
+    # Prevent CSV formula injection: prefix dangerous characters with a tab
+    if value and value[0] in ("=", "+", "-", "@", "\t", "\r"):
+        value = "\t" + value
     return '"' + value.replace('"', '""') + '"'
 
 

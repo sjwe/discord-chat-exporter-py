@@ -277,6 +277,9 @@ class _Parser:
         return result
 
 
+_MAX_FILTER_LENGTH = 1000
+
+
 def parse_filter(text: str) -> MessageFilter:
     """Parse a filter DSL string and return the corresponding filter tree.
 
@@ -297,4 +300,8 @@ def parse_filter(text: str) -> MessageFilter:
     """
     if not text or not text.strip():
         raise FilterParseError("Filter expression is empty")
+    if len(text) > _MAX_FILTER_LENGTH:
+        raise FilterParseError(
+            f"Filter expression exceeds maximum length of {_MAX_FILTER_LENGTH} characters"
+        )
     return _Parser(text).parse()

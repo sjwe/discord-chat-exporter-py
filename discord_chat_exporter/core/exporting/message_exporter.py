@@ -22,28 +22,34 @@ def _get_partition_file_path(base_path: str, partition_index: int) -> str:
 
 
 def _create_writer(file_path: str, fmt: ExportFormat, context: ExportContext) -> MessageWriter:
-    stream = open(file_path, "wb")  # noqa: SIM115
+    try:
+        stream = open(file_path, "wb")  # noqa: SIM115
+    except OSError:
+        raise
 
-    if fmt == ExportFormat.PLAIN_TEXT:
-        from discord_chat_exporter.core.exporting.writers.plaintext import PlainTextMessageWriter
+    try:
+        if fmt == ExportFormat.PLAIN_TEXT:
+            from discord_chat_exporter.core.exporting.writers.plaintext import PlainTextMessageWriter
 
-        return PlainTextMessageWriter(stream, context)
-    elif fmt == ExportFormat.CSV:
-        from discord_chat_exporter.core.exporting.writers.csv import CsvMessageWriter
+            return PlainTextMessageWriter(stream, context)
+        elif fmt == ExportFormat.CSV:
+            from discord_chat_exporter.core.exporting.writers.csv import CsvMessageWriter
 
-        return CsvMessageWriter(stream, context)
-    elif fmt in (ExportFormat.HTML_DARK, ExportFormat.HTML_LIGHT):
-        from discord_chat_exporter.core.exporting.writers.html import HtmlMessageWriter
+            return CsvMessageWriter(stream, context)
+        elif fmt in (ExportFormat.HTML_DARK, ExportFormat.HTML_LIGHT):
+            from discord_chat_exporter.core.exporting.writers.html import HtmlMessageWriter
 
-        theme = "Dark" if fmt == ExportFormat.HTML_DARK else "Light"
-        return HtmlMessageWriter(stream, context, theme)
-    elif fmt == ExportFormat.JSON:
-        from discord_chat_exporter.core.exporting.writers.json import JsonMessageWriter
+            theme = "Dark" if fmt == ExportFormat.HTML_DARK else "Light"
+            return HtmlMessageWriter(stream, context, theme)
+        elif fmt == ExportFormat.JSON:
+            from discord_chat_exporter.core.exporting.writers.json import JsonMessageWriter
 
-        return JsonMessageWriter(stream, context)
-    else:
+            return JsonMessageWriter(stream, context)
+        else:
+            raise ValueError(f"Unknown export format: {fmt}")
+    except Exception:
         stream.close()
-        raise ValueError(f"Unknown export format: {fmt}")
+        raise
 
 
 class MessageExporter:

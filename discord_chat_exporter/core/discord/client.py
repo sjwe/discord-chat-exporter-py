@@ -151,23 +151,23 @@ class DiscordClient:
     async def _resolve_token_kind(self) -> TokenKind:
         """Auto-detect whether the token is a user or bot token.
 
-        Tries user-style auth first, falls back to bot-style auth.  Caches the
-        result for subsequent requests.
+        Tries bot-style auth first (more common), falls back to user-style.
+        Caches the result for subsequent requests.
         """
         if self._resolved_token_kind is not None:
             return self._resolved_token_kind
+
+        # Try authenticating as a bot first (most common use case)
+        bot_resp = await self._raw_request("users/@me", TokenKind.BOT)
+        if bot_resp.status_code != 401:
+            self._resolved_token_kind = TokenKind.BOT
+            return TokenKind.BOT
 
         # Try authenticating as a user
         user_resp = await self._raw_request("users/@me", TokenKind.USER)
         if user_resp.status_code != 401:
             self._resolved_token_kind = TokenKind.USER
             return TokenKind.USER
-
-        # Try authenticating as a bot
-        bot_resp = await self._raw_request("users/@me", TokenKind.BOT)
-        if bot_resp.status_code != 401:
-            self._resolved_token_kind = TokenKind.BOT
-            return TokenKind.BOT
 
         raise DiscordChatExporterError("Authentication token is invalid.", is_fatal=True)
 

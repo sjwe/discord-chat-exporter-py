@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from discord_chat_exporter.core.discord.models.message import Message
     from discord_chat_exporter.core.discord.models.role import Role
     from discord_chat_exporter.core.discord.models.user import User
+    from discord_chat_exporter.core.exporting.asset_downloader import ExportAssetDownloader
     from discord_chat_exporter.core.exporting.request import ExportRequest
 
 
@@ -30,6 +31,7 @@ class ExportContext:
         self._members: dict[Snowflake, Member | None] = {}
         self._channels: dict[Snowflake, Channel] = {}
         self._roles: dict[Snowflake, Role] = {}
+        self._downloader: ExportAssetDownloader | None = None
 
     # -- date formatting --
 
@@ -38,8 +40,26 @@ class ExportContext:
             return instant.astimezone(timezone.utc)
         return instant.astimezone()
 
-    def format_date(self, instant: datetime, fmt: str = "%x %X") -> str:
-        return self.normalize_date(instant).strftime(fmt)
+    def format_date(self, instant: datetime, fmt: str = "g") -> str:
+        """Format a datetime using Discord-style format codes.
+
+        Codes: t (short time), T (long time), d (short date), D (long date),
+        f (long date + short time), F (long date + day + short time),
+        g (short date + short time, default).
+        Falls back to strftime for unrecognized codes.
+        """
+        dt = self.normalize_date(instant)
+        discord_formats: dict[str, str] = {
+            "t": "%H:%M",
+            "T": "%H:%M:%S",
+            "d": "%m/%d/%Y",
+            "D": "%B %d, %Y",
+            "f": "%B %d, %Y %H:%M",
+            "F": "%A, %B %d, %Y %H:%M",
+            "g": "%m/%d/%Y %H:%M",
+        }
+        strftime_fmt = discord_formats.get(fmt, fmt)
+        return dt.strftime(strftime_fmt)
 
     # -- populate caches --
 
@@ -102,18 +122,29 @@ class ExportContext:
 
     # -- asset resolution --
 
+    def _get_downloader(self):
+        """Get or create the shared asset downloader instance."""
+        if self._downloader is None:
+            from discord_chat_exporter.core.exporting.asset_downloader import ExportAssetDownloader
+
+            self._downloader = ExportAssetDownloader(
+                self.request.assets_dir_path,
+                self.request.should_reuse_media,
+            )
+        return self._downloader
+
     async def resolve_asset_url(self, url: str) -> str:
         if not self.request.should_download_media:
             return url
 
         try:
-            from discord_chat_exporter.core.exporting.asset_downloader import ExportAssetDownloader
-
-            downloader = ExportAssetDownloader(
-                self.request.assets_dir_path,
-                self.request.should_reuse_media,
-            )
+            downloader = self._get_downloader()
             file_path = await downloader.download(url)
+
+            # If download was skipped (disallowed domain), the URL is returned as-is
+            if file_path == url:
+                return url
+
             rel_path = os.path.relpath(file_path, self.request.output_dir_path)
 
             if rel_path.startswith(".."):
@@ -127,6 +158,12 @@ class ExportContext:
             return optimal_path
         except Exception:
             return url
+
+    async def close(self) -> None:
+        """Clean up resources."""
+        if self._downloader is not None and hasattr(self._downloader, 'close'):
+            await self._downloader.close()
+            self._downloader = None
 
     # -- message helpers --
 

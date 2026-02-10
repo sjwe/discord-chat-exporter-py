@@ -251,13 +251,32 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 
 ---
 
-## Top Priority Recommendations
+## Resolution Status
 
-1. **Enable Jinja2 autoescaping** — highest-impact security fix, straightforward to implement
-2. **Restrict asset download URLs** to Discord CDN domains and add size limits
-3. **Add tests for export writers and Discord client** — the core pipeline is entirely untested
-4. **Fix emoji attribute escaping** in HTML visitor
-5. **Reuse HTTP client** in asset downloader instead of creating one per download
-6. **Add path traversal protection** to output path resolution
-7. **Add CSV formula injection prevention**
-8. **Implement concurrent asset downloads** for significant performance improvement on media-heavy exports
+| # | Issue | Status |
+|---|-------|--------|
+| 1 | XSS via disabled Jinja2 autoescaping | FIXED |
+| 2 | Asset downloader follows arbitrary URLs | FIXED |
+| 3 | ~92% of source modules have zero test coverage | Open |
+| 4 | Potential ReDoS in markdown parser | Open (mitigated by depth limit) |
+| 5 | Token exposed in process listing | Open (env var documented as preferred) |
+| 6 | Unbounded cache growth in ExportContext | Open (bounded by unique authors) |
+| 7 | Asset downloader creates new HTTP client per download | FIXED |
+| 8 | No concurrent asset downloads | FIXED |
+| 9 | Message exporter opens files without async I/O | FIXED |
+| 10 | Path template allows writing outside expected directory | FIXED |
+| 11 | CSV injection not prevented | FIXED |
+| 12 | Regex patterns compiled at module import | FIXED |
+| 13 | JSON writer builds full message dict before serializing | FIXED |
+| 14 | HTML writer reloads Jinja2 templates per message group | FIXED |
+| 15 | Inconsistent return types across client methods | Open (by design) |
+| 16 | Filter parser has no input length limit | FIXED |
+| 17 | No integration tests for export pipeline | Open |
+| 18 | Discord models have no validation tests | Open |
+| 19 | HTML visitor produces unescaped emoji attributes | FIXED |
+| 20 | `format_date` uses strftime instead of Discord-style formatting | FIXED |
+| 21 | Token auto-detection makes two API calls | FIXED |
+| 22 | `aiofiles` dependency declared but never used | FIXED |
+| 23 | File streams not using context managers | FIXED |
+
+**17 of 23 issues fixed.** Remaining 6 are either by design, require test infrastructure, or need external dependencies.

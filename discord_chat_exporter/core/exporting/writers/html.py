@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
 
 import jinja2
+from markupsafe import Markup
 
 from discord_chat_exporter.core.discord.models.embed import EmbedKind
 from discord_chat_exporter.core.discord.models.message import MessageFlags, MessageKind
@@ -58,10 +59,14 @@ class HtmlMessageWriter(MessageWriter):
         self._message_group: list[Message] = []
         self._env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(_TEMPLATE_DIR),
-            autoescape=False,
+            autoescape=True,
             trim_blocks=True,
             lstrip_blocks=True,
         )
+        # Cache templates at init instead of loading per message group
+        self._preamble_template = self._env.get_template("preamble.html.j2")
+        self._message_group_template = self._env.get_template("message_group.html.j2")
+        self._postamble_template = self._env.get_template("postamble.html.j2")
 
     # -- grouping --
 
@@ -87,19 +92,19 @@ class HtmlMessageWriter(MessageWriter):
 
     # -- markdown helpers --
 
-    async def _format_markdown(self, text: str) -> str:
+    async def _format_markdown(self, text: str) -> Markup:
         if self.context.request.should_format_markdown:
             from discord_chat_exporter.core.markdown.html_visitor import HtmlMarkdownVisitor
 
-            return await HtmlMarkdownVisitor.format(self.context, text, is_jumbo_allowed=True)
-        return html_escape(text)
+            return Markup(await HtmlMarkdownVisitor.format(self.context, text, is_jumbo_allowed=True))
+        return Markup(html_escape(text))
 
-    async def _format_embed_markdown(self, text: str) -> str:
+    async def _format_embed_markdown(self, text: str) -> Markup:
         if self.context.request.should_format_markdown:
             from discord_chat_exporter.core.markdown.html_visitor import HtmlMarkdownVisitor
 
-            return await HtmlMarkdownVisitor.format(self.context, text, is_jumbo_allowed=False)
-        return html_escape(text)
+            return Markup(await HtmlMarkdownVisitor.format(self.context, text, is_jumbo_allowed=False))
+        return Markup(html_escape(text))
 
     # -- date/time --
 
@@ -108,46 +113,46 @@ class HtmlMessageWriter(MessageWriter):
 
     # -- system notification HTML --
 
-    def _build_sys_html(self, message: Message) -> str:
+    def _build_sys_html(self, message: Message) -> Markup:
         kind = message.kind
         e = html_escape
 
         if kind == MessageKind.RECIPIENT_ADD and message.mentioned_users:
             u = message.mentioned_users[0]
-            return (
+            return Markup(
                 f'added <a class="chatlog__system-notification-link" '
                 f'title="{e(u.full_name)}">{e(u.display_name)}</a> to the group.'
             )
         if kind == MessageKind.RECIPIENT_REMOVE and message.mentioned_users:
             u = message.mentioned_users[0]
             if message.author.id == u.id:
-                return "left the group."
-            return (
+                return Markup("left the group.")
+            return Markup(
                 f'removed <a class="chatlog__system-notification-link" '
                 f'title="{e(u.full_name)}">{e(u.display_name)}</a> from the group.'
             )
         if kind == MessageKind.CALL:
             end = message.call_ended_timestamp or message.timestamp
             minutes = abs((end - message.timestamp).total_seconds()) / 60
-            return f"started a call that lasted {minutes:,.0f} minutes"
+            return Markup(f"started a call that lasted {minutes:,.0f} minutes")
         if kind == MessageKind.CHANNEL_NAME_CHANGE:
-            return (
+            return Markup(
                 f'changed the channel name: '
                 f'<span class="chatlog__system-notification-link">{e(message.content)}</span>'
             )
         if kind == MessageKind.CHANNEL_ICON_CHANGE:
-            return "changed the channel icon."
+            return Markup("changed the channel icon.")
         if kind == MessageKind.CHANNEL_PINNED_MESSAGE and message.reference:
             mid = message.reference.message_id
-            return (
+            return Markup(
                 f'pinned <a class="chatlog__system-notification-link" '
                 f'href="#chatlog__message-container-{mid}">a message</a> to this channel.'
             )
         if kind == MessageKind.THREAD_CREATED:
-            return "started a thread."
+            return Markup("started a thread.")
         if kind == MessageKind.GUILD_MEMBER_JOIN:
-            return "joined the server."
-        return e(message.content.lower())
+            return Markup("joined the server.")
+        return Markup(e(message.content.lower()))
 
     # -- pre-process messages --
 
@@ -487,9 +492,9 @@ class HtmlMessageWriter(MessageWriter):
             req.channel.icon_url or req.guild.icon_url
         )
 
-        channel_topic_html = None
+        channel_topic_html: Markup | None = None
         if req.channel.topic and req.channel.topic.strip():
-            channel_topic_html = await self._format_markdown(req.channel.topic)
+            channel_topic_html = await self._format_markdown(req.channel.topic)  # already Markup
 
         date_range_text = None
         if req.after is not None or req.before is not None:
@@ -503,8 +508,7 @@ class HtmlMessageWriter(MessageWriter):
             elif req.before is not None:
                 date_range_text = f"Before {self._fmt_date(req.before.to_date())}"
 
-        template = self._env.get_template("preamble.html.j2")
-        html = template.render(
+        html = self._preamble_template.render(
             themed=themed,
             theme_name=self._theme_name,
             guild_name=req.guild.name,
@@ -526,8 +530,7 @@ class HtmlMessageWriter(MessageWriter):
         for i, msg in enumerate(messages):
             prepared.append(await self._prepare_message(msg, is_first=(i == 0)))
 
-        template = self._env.get_template("message_group.html.j2")
-        html = template.render(messages=prepared)
+        html = self._message_group_template.render(messages=prepared)
         self._writer.write(html + "\n")
         self._writer.flush()
 
@@ -561,8 +564,7 @@ class HtmlMessageWriter(MessageWriter):
         else:
             tz_text = f"{tz_offset:g}"
 
-        template = self._env.get_template("postamble.html.j2")
-        html = template.render(
+        html = self._postamble_template.render(
             messages_written=f"{self.messages_written:,}",
             timezone_text=tz_text,
         )

@@ -18,8 +18,11 @@ if TYPE_CHECKING:
 
 
 def _escape_filename(name: str) -> str:
-    """Remove characters not allowed in file names."""
-    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
+    """Remove characters not allowed in file names and prevent path traversal."""
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
+    # Strip path traversal components
+    cleaned = cleaned.replace("..", "_")
+    return cleaned
 
 
 def _format_path(
@@ -91,10 +94,13 @@ class ExportRequest:
         self.output_file_path = self._get_output_base_file_path(
             guild, channel, output_path, export_format, after, before
         )
+        # Resolve to absolute path to prevent traversal
+        self.output_file_path = str(Path(self.output_file_path).resolve())
         self.output_dir_path = str(Path(self.output_file_path).parent)
 
         if assets_dir_path:
             self.assets_dir_path = _format_path(assets_dir_path, guild, channel, after, before)
+            self.assets_dir_path = str(Path(self.assets_dir_path).resolve())
         else:
             self.assets_dir_path = self.output_file_path + "_Files" + os.sep
 

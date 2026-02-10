@@ -89,3 +89,4 @@ class ChannelExporter:
 
         finally:
             await exporter.close()
+            await context.close()

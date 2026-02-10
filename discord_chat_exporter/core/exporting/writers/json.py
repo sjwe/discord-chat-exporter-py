@@ -317,10 +317,9 @@ class JsonMessageWriter(MessageWriter):
                 inline_emojis.append(await self._build_emoji(emoji))
         msg_obj["inlineEmojis"] = inline_emojis
 
-        # Write indented JSON
+        # Write indented JSON (4-space base indent for nesting inside "messages" array)
         msg_json = json.dumps(msg_obj, ensure_ascii=False, indent=2, default=str)
-        # Indent each line by 4 spaces
-        indented = "\n".join("    " + line for line in msg_json.split("\n"))
+        indented = "    " + msg_json.replace("\n", "\n    ")
         w.write(indented)
         w.flush()
 
