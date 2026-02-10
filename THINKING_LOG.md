@@ -298,3 +298,64 @@ Wrote comprehensive tests across 4 files:
 ### Remaining Work
 
 1. **End-to-end test** - Export a real channel with a test token to verify output correctness
+
+---
+
+## 2026-02-10: Code Review (Session 5)
+
+### Comprehensive Review Conducted
+
+Ran a parallel three-way review (security, performance, test coverage) across all 51 source files. Full results written to `REVIEW.md`.
+
+### Key Findings Summary
+
+**23 issues found** across 3 critical, 7 high, 9 medium, 4 low.
+
+#### Critical Issues Discovered
+
+1. **XSS via disabled Jinja2 autoescaping** (`writers/html.py:59-64`) — `autoescape=False` means guild names, usernames, embed footers, and other Discord-controlled strings are rendered as raw HTML in templates. A malicious guild name like `<script>alert(1)</script>` would execute in the browser. Fix: enable `autoescape=True`, use `jinja2.Markup` for pre-escaped content.
+
+2. **Asset downloader follows arbitrary URLs** (`asset_downloader.py:56-79`) — When `--media` is enabled, any URL in a message (embeds, attachments) is fetched and written to disk. No domain allowlist, no size limit, no content-type check. Full response loaded into memory. Fix: restrict to Discord CDN domains, add streaming + size cap.
+
+3. **~92% of modules untested** — Only 4 of ~45 modules have tests (snowflake, markdown parser, filter parser, partitioning). Zero coverage on the entire export pipeline, all writers, Discord client, models, visitors, CLI.
+
+#### High-Severity Issues
+
+4. **ReDoS risk in markdown regex** — Several patterns use `(.+?)` with `DOTALL`; the list pattern has nested repetition. Pathological input can hang the parser.
+
+5. **Token visible in `ps` output** — CLI `-t` flag exposes token in process listing.
+
+6. **Unbounded member cache** — `ExportContext._members` dict grows without limit for large exports.
+
+7. **New HTTP client per asset download** — `httpx.AsyncClient()` created inside every `download()` call (TLS handshake overhead per download).
+
+8. **Sequential asset downloads** — No concurrency when downloading media, despite being fully async.
+
+9. **Sync file open blocks event loop** — `open()` in `message_exporter.py` despite `aiofiles` being a declared dependency.
+
+10. **Path traversal via guild/channel names** — `_escape_filename()` doesn't strip `..` components, so `../../etc` guild name could write outside expected directory.
+
+#### Medium-Severity Issues
+
+11. CSV formula injection (no prefix on `=`/`+`/`-`/`@` cells)
+12. 30 regex patterns compiled at import time (~50-100ms startup cost even when unused)
+13. JSON writer double-indentation overhead
+14. Jinja2 template reloaded per message group (should cache in `__init__`)
+15. Inconsistent return types (`get_guilds` → AsyncIterator vs `get_channels` → list)
+16. No input length limit on filter parser
+17. Zero integration tests for export pipeline
+18. Zero validation tests for all 14 Discord models
+19. Unescaped emoji name/code in HTML `alt`/`title` attributes
+
+### Architectural Observations
+
+- The pre-resolve-then-template pattern for HTML export (Phase 1 decision) is validated — it cleanly separates async from rendering. However, it means the security boundary is split: Python code escapes message content, but templates must also escape metadata (guild names, usernames, etc.).
+
+- The `aiofiles` dependency was added with good intentions but never wired in. The export pipeline uses sync `open()` throughout.
+
+- The asset downloader's per-URL lock design is solid for deduplication, but the lock dict itself grows without bound (same pattern as the member cache).
+
+### Documentation Added
+
+- Created `REVIEW.md` with all 23 findings, organized by severity, with file:line references and fix recommendations.
+- Created `README.md` with installation, usage (all CLI commands), export formats, path templating, filter DSL syntax, development setup, and project structure.
