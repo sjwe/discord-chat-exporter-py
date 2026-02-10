@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from typing import TYPE_CHECKING
 
 import click
@@ -12,6 +13,24 @@ if TYPE_CHECKING:
     from discord_chat_exporter.core.discord.snowflake import Snowflake
 
 console = Console()
+
+
+def _resolve_token(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> str | None:
+    """Resolve token from a raw value, file (``@path``), or stdin (``-``)."""
+    if value is None:
+        return None
+    if value == "-":
+        return sys.stdin.readline().strip()
+    if value.startswith("@"):
+        filepath = value[1:]
+        try:
+            with open(filepath) as f:
+                return f.read().strip()
+        except OSError as e:
+            raise click.BadParameter(f"Cannot read token file: {e}") from e
+    return value
 
 
 class SnowflakeParamType(click.ParamType):
@@ -55,7 +74,16 @@ EXPORT_FORMAT = ExportFormatParamType()
 
 # Common options
 token_option = click.option(
-    "-t", "--token", envvar="DISCORD_TOKEN", required=True, help="Discord token."
+    "-t",
+    "--token",
+    envvar="DISCORD_TOKEN",
+    required=True,
+    callback=_resolve_token,
+    help=(
+        "Discord token. Prefer the DISCORD_TOKEN env var to avoid leaking "
+        "the token in shell history and process listings. Use @FILE to read "
+        "from a file, or - to read from stdin."
+    ),
 )
 
 
@@ -74,8 +102,7 @@ def guilds(token: str) -> None:
         from discord_chat_exporter.core.discord.client import DiscordClient
 
         async with DiscordClient(token) as client:
-            guild_list = await client.get_guilds()
-            for g in guild_list:
+            for g in await client.get_guilds():
                 console.print(f"{g.id} | {g.name}")
 
     asyncio.run(_run())

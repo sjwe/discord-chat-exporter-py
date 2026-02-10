@@ -681,3 +681,58 @@ Changes applied to 2 files:
 - 4000-char star chaos: 10.4s → ~0.076s (137x improvement)
 - All 701 tests pass (687 existing + 14 new) in ~0.47s
 - GitHub issue #4 closed
+
+---
+
+## 2026-02-10: Final Issue Fixes (Session 10)
+
+### Remaining GitHub Issues
+
+Three open issues remained: #5 (token security), #6 (unbounded member cache), #15 (inconsistent return types). Previously marked "by design" but revisited and fixed properly.
+
+### Issue #5: Token Exposed in Process Listing (Security)
+
+**Problem:** The `-t` CLI argument exposes the Discord token in `ps` output and shell history.
+
+**Fix applied to `cli/app.py`:**
+- Added `_resolve_token()` callback with three input modes:
+  - `@FILE` — reads token from a file path (e.g., `-t @~/.discord_token`)
+  - `-` — reads token from stdin (e.g., `echo $TOKEN | discord-chat-exporter export -t -`)
+  - Raw value — passes through unchanged (existing behavior)
+- Updated help text to warn about CLI argument visibility and recommend `DISCORD_TOKEN` env var
+- Uses Click's `callback=` mechanism so resolution happens transparently before command execution
+
+### Issue #6: Unbounded Member Cache Growth (Performance)
+
+**Problem:** `ExportContext._members` dict grows without bound. Every unique author triggers an API call and cache entry, including `None` entries for users who left.
+
+**Fix applied to `core/exporting/context.py`:**
+- Replaced `dict` with `OrderedDict` for LRU semantics
+- Added `MEMBER_CACHE_MAX_SIZE = 10_000` module constant
+- `_populate_member()` now calls `move_to_end()` on cache hits and evicts oldest entries via `popitem(last=False)` when over limit
+- `try_get_member()` marks accessed entries as recently used
+- Channels and roles remain unbounded (Discord caps these at ~500 and ~250 respectively)
+
+**Design note:** 10,000 is generous — covers even very large guild exports. Each `Member` object is small (~200 bytes), so 10k entries ≈ 2MB. The LRU eviction ensures that for channels with >10k unique authors, only the most recently referenced members stay cached.
+
+### Issue #15: Inconsistent Return Types (Consistency)
+
+**Problem:** `get_guilds()` returned `AsyncIterator[Guild]` while `get_channels()`, `get_roles()`, and `get_dm_channels()` returned `list`. This caused a latent bug in `app.py:77` where `await client.get_guilds()` was called on an async generator (which returns the generator object, not the results).
+
+**Fix applied to `core/discord/client.py`:**
+- Converted `get_guilds()` from async generator to regular async method returning `list[Guild]`
+- Collects all guilds into a list before returning (guild counts are bounded — most users have <200)
+- Added docstring rationale to all four list-returning methods explaining the design choice
+- `get_messages()`, `get_members()`, and `get_message_reactions()` remain async iterators since their result sets can be very large
+
+**Fix applied to `cli/app.py`:**
+- Fixed `guild_list = await client.get_guilds()` → `for g in await client.get_guilds():`
+
+**Fix applied to `tests/test_client.py`:**
+- Updated `TestGetGuilds` tests from `async for guild in client.get_guilds()` to `guilds = await client.get_guilds()`
+
+### Results
+
+- All 701 tests pass
+- All 3 remaining GitHub issues resolved
+- REVIEW.md resolution status: **23 of 23 issues fixed**

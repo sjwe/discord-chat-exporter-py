@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from urllib.parse import quote
@@ -21,6 +22,11 @@ if TYPE_CHECKING:
     from discord_chat_exporter.core.exporting.asset_downloader import ExportAssetDownloader
     from discord_chat_exporter.core.exporting.request import ExportRequest
 
+#: Maximum number of entries in the member LRU cache.  Channels and roles
+#: are bounded by Discord itself (~500 channels, ~250 roles) so they do not
+#: need eviction, but member caches can grow with every unique message author.
+MEMBER_CACHE_MAX_SIZE = 10_000
+
 
 class ExportContext:
     """Holds caches and provides lookups during export."""
@@ -28,7 +34,7 @@ class ExportContext:
     def __init__(self, discord: DiscordClient, request: ExportRequest) -> None:
         self.discord = discord
         self.request = request
-        self._members: dict[Snowflake, Member | None] = {}
+        self._members: OrderedDict[Snowflake, Member | None] = OrderedDict()
         self._channels: dict[Snowflake, Channel] = {}
         self._roles: dict[Snowflake, Role] = {}
         self._downloader: ExportAssetDownloader | None = None
@@ -82,6 +88,8 @@ class ExportContext:
         self, member_id: Snowflake, fallback_user: User | None
     ) -> None:
         if member_id in self._members:
+            # Mark as recently used
+            self._members.move_to_end(member_id)
             return
 
         member = await self.discord.try_get_member(self.request.guild.id, member_id)
@@ -92,9 +100,15 @@ class ExportContext:
         # Store even if None to avoid re-fetching
         self._members[member_id] = member
 
+        # Evict least-recently-used entries when the cache is full
+        while len(self._members) > MEMBER_CACHE_MAX_SIZE:
+            self._members.popitem(last=False)
+
     # -- lookups --
 
     def try_get_member(self, member_id: Snowflake) -> Member | None:
+        if member_id in self._members:
+            self._members.move_to_end(member_id)
         return self._members.get(member_id)
 
     def try_get_channel(self, channel_id: Snowflake) -> Channel | None:

@@ -21,7 +21,7 @@ The C# tool supports 5 export formats (PlainText, HtmlDark, HtmlLight, CSV, JSON
 | `pydantic` | Manual JSON parsing | JSON->model with validation, aliases, validators |
 | `tenacity` | Polly | Retry with exponential backoff |
 | `htmlmin` | WebMarkupMin | HTML minification |
-| `aiofiles` | System.IO async | Async file I/O for downloads |
+| ~~`aiofiles`~~ | ~~System.IO async~~ | ~~Async file I/O for downloads~~ (removed — unused, sync I/O sufficient) |
 
 Dev: `pytest`, `pytest-asyncio`, `pytest-httpx`, `ruff`, `mypy`
 Build: `uv` (fast, modern Python package manager)
@@ -230,6 +230,25 @@ pyproject.toml
   - 14 ReDoS-specific tests in `test_markdown_parser.py`
 - README with usage, token setup, format docs, filter DSL docs — COMPLETE
 
+### Phase 8: Final Issue Fixes — COMPLETE
+
+Resolved the 3 remaining open GitHub issues (#5, #6, #15):
+
+- **Token security** (Issue #5) — `cli/app.py`
+  - Added `_resolve_token()` callback supporting `@FILE` (read from file) and `-` (read from stdin)
+  - Updated help text to warn about CLI arg visibility, recommend `DISCORD_TOKEN` env var
+- **Bounded member cache** (Issue #6) — `core/exporting/context.py`
+  - Replaced `dict` with `OrderedDict`-based LRU cache (`MEMBER_CACHE_MAX_SIZE = 10_000`)
+  - `_populate_member()` evicts least-recently-used entries when full
+  - `try_get_member()` marks accessed entries as recently used via `move_to_end()`
+- **Consistent return types** (Issue #15) — `core/discord/client.py`
+  - Converted `get_guilds()` from `AsyncIterator[Guild]` to `list[Guild]` (guild counts are bounded)
+  - Added docstring rationale to all list-returning methods explaining design choice
+  - Fixed latent bug in `app.py` where `await` was called on an async generator
+  - `get_messages()`, `get_members()`, `get_message_reactions()` remain async iterators (unbounded results)
+
+All 701 tests pass. **All 23 review issues resolved.**
+
 ---
 
 ## Verification
@@ -240,3 +259,9 @@ pyproject.toml
 4. **Media test**: Run with `--media` flag, verify assets downloaded and referenced correctly in HTML
 5. **Filter test**: Run with `--filter "from:username"` and `--filter "has:attachments"`, verify correct filtering
 6. **Partition test**: Run with `--partition 10` and `--partition 1mb`, verify file splitting
+
+---
+
+## Final Status
+
+**All implementation phases complete. All 23 code review issues resolved. 701 tests passing.**

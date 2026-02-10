@@ -220,13 +220,16 @@ class DiscordClient:
 
     # ---- guilds -----------------------------------------------------------
 
-    async def get_guilds(self) -> AsyncIterator[Guild]:
+    async def get_guilds(self) -> list[Guild]:
         """List all guilds accessible to the authenticated user.
 
-        Yields the synthetic *Direct Messages* guild first, then paginates
-        through the real guilds.
+        Returns a list rather than an async iterator because guild counts
+        are bounded (most users belong to fewer than 200 guilds) and all
+        callers need the full collection.  Contrast with ``get_messages()``,
+        which remains an async iterator since message counts can be very
+        large.
         """
-        yield Guild.DIRECT_MESSAGES
+        guilds: list[Guild] = [Guild.DIRECT_MESSAGES]
 
         current_after = Snowflake.ZERO
         while True:
@@ -237,12 +240,14 @@ class DiscordClient:
             data = await self._get_json(url)
 
             if not data:
-                return
+                break
 
             for guild_json in data:
                 guild = Guild.model_validate(guild_json)
-                yield guild
+                guilds.append(guild)
                 current_after = guild.id
+
+        return guilds
 
     async def get_guild(self, guild_id: Snowflake) -> Guild:
         """Fetch a single guild by ID."""
@@ -258,6 +263,10 @@ class DiscordClient:
         """List channels in a guild, sorted by position.
 
         For the DM pseudo-guild, returns the user's DM channels instead.
+
+        Returns a list because channel counts per guild are bounded by
+        Discord (max ~500) and callers typically need the full collection
+        for cache population.
         """
         if guild_id == Guild.DIRECT_MESSAGES.id:
             return await self.get_dm_channels()
@@ -458,7 +467,11 @@ class DiscordClient:
     # ---- roles ------------------------------------------------------------
 
     async def get_roles(self, guild_id: Snowflake) -> list[Role]:
-        """List all roles in a guild."""
+        """List all roles in a guild.
+
+        Returns a list because role counts are bounded and callers need
+        the full set for colour/permission resolution.
+        """
         if guild_id == Guild.DIRECT_MESSAGES.id:
             return []
 
@@ -468,7 +481,11 @@ class DiscordClient:
     # ---- DM channels ------------------------------------------------------
 
     async def get_dm_channels(self) -> list[Channel]:
-        """List the authenticated user's DM channels."""
+        """List the authenticated user's DM channels.
+
+        Returns a list because DM channel counts are bounded and callers
+        need the full collection.
+        """
         data = await self._get_json("users/@me/channels")
         return [Channel.model_validate(ch) for ch in data]
 

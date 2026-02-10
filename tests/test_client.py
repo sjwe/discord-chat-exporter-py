@@ -754,13 +754,11 @@ class TestGetRoles:
 
 
 class TestGetGuilds:
-    async def test_yields_dm_guild_first(self):
+    async def test_returns_dm_guild_first(self):
         client = DiscordClient(token="t")
         # Return empty data to stop pagination after first page
         with patch.object(client, "_get_json", new_callable=AsyncMock, return_value=[]):
-            guilds = []
-            async for guild in client.get_guilds():
-                guilds.append(guild)
+            guilds = await client.get_guilds()
         assert guilds[0] is Guild.DIRECT_MESSAGES
 
     async def test_paginates_guilds(self):
@@ -777,9 +775,7 @@ class TestGetGuilds:
             return []  # End pagination
 
         with patch.object(client, "_get_json", side_effect=mock_get_json):
-            guilds = []
-            async for guild in client.get_guilds():
-                guilds.append(guild)
+            guilds = await client.get_guilds()
 
         # DM guild + Guild A
         assert len(guilds) == 2

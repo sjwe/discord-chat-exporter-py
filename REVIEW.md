@@ -89,6 +89,8 @@ The Discord token is passed as a CLI argument (`-t`), making it visible in `ps` 
 
 **Recommendation:** Prefer environment variable or file-based token input. Add a note in help text warning about CLI argument visibility.
 
+**Fix applied:** Added `_resolve_token()` callback supporting `@FILE` (read token from file) and `-` (read from stdin). Updated help text to warn about CLI argument visibility and recommend `DISCORD_TOKEN` env var.
+
 ### 6. Unbounded Cache Growth in ExportContext
 
 **Severity:** High | **Category:** Performance
@@ -97,6 +99,8 @@ The Discord token is passed as a CLI argument (`-t`), making it visible in `ps` 
 The `_members` dict grows without bound — every unique author referenced triggers an API call and cache entry. For very large guilds/channels (100k+ messages with many unique authors), this could consume significant memory.
 
 **Recommendation:** Use an LRU cache with a configurable max size, or periodically flush entries not seen in recent messages.
+
+**Fix applied:** Replaced `dict` with `OrderedDict`-based LRU cache (`MEMBER_CACHE_MAX_SIZE = 10_000`). `_populate_member()` evicts least-recently-used entries when full. `try_get_member()` marks accessed entries as recently used via `move_to_end()`.
 
 ### 7. Asset Downloader Creates New HTTP Client Per Download
 
@@ -183,6 +187,8 @@ Each message is fully materialized as a nested Python dict, then serialized with
 
 **Recommendation:** Be consistent — either all return lists or all return async iterators.
 
+**Fix applied:** Converted `get_guilds()` from async generator (`AsyncIterator[Guild]`) to `list[Guild]` since guild counts are bounded. Added docstring rationale to all list-returning methods explaining why they return lists vs why `get_messages()` remains an async iterator. Also fixed latent bug in `app.py` where `await` was called on the async generator.
+
 ### 16. Filter Parser Has No Input Length Limit
 
 **Severity:** Medium | **Category:** Security
@@ -261,8 +267,8 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 | 2 | Asset downloader follows arbitrary URLs | FIXED |
 | 3 | ~92% of source modules have zero test coverage | FIXED |
 | 4 | Potential ReDoS in markdown parser | FIXED |
-| 5 | Token exposed in process listing | Open (env var documented as preferred) |
-| 6 | Unbounded cache growth in ExportContext | Open (bounded by unique authors) |
+| 5 | Token exposed in process listing | FIXED |
+| 6 | Unbounded cache growth in ExportContext | FIXED |
 | 7 | Asset downloader creates new HTTP client per download | FIXED |
 | 8 | No concurrent asset downloads | FIXED |
 | 9 | Message exporter opens files without async I/O | FIXED |
@@ -271,7 +277,7 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 | 12 | Regex patterns compiled at module import | FIXED |
 | 13 | JSON writer builds full message dict before serializing | FIXED |
 | 14 | HTML writer reloads Jinja2 templates per message group | FIXED |
-| 15 | Inconsistent return types across client methods | Open (by design) |
+| 15 | Inconsistent return types across client methods | FIXED |
 | 16 | Filter parser has no input length limit | FIXED |
 | 17 | No integration tests for export pipeline | FIXED |
 | 18 | Discord models have no validation tests | FIXED |
@@ -281,4 +287,4 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 | 22 | `aiofiles` dependency declared but never used | FIXED |
 | 23 | File streams not using context managers | FIXED |
 
-**21 of 23 issues fixed.** Remaining 2 are by design (token visibility, unbounded cache).
+**All 23 issues fixed.**
