@@ -271,7 +271,7 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 | 14 | HTML writer reloads Jinja2 templates per message group | FIXED |
 | 15 | Inconsistent return types across client methods | Open (by design) |
 | 16 | Filter parser has no input length limit | FIXED |
-| 17 | No integration tests for export pipeline | Open |
+| 17 | No integration tests for export pipeline | In Progress |
 | 18 | Discord models have no validation tests | Open |
 | 19 | HTML visitor produces unescaped emoji attributes | FIXED |
 | 20 | `format_date` uses strftime instead of Discord-style formatting | FIXED |

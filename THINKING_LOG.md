@@ -456,5 +456,42 @@ Implemented fixes for 17 of the 23 review issues. All 92 existing tests pass aft
 - **Issue #5** (token in `ps`): CLI arg visibility is a known limitation; env var is documented as preferred
 - **Issue #6** (unbounded member cache): Members are small and the cache is bounded by unique authors in the export
 - **Issue #15** (inconsistent return types): Design choice — guilds are paginated, channels are not
-- **Issue #17** (integration tests): Requires mocked Discord client infrastructure
+- **Issue #17** (integration tests): Now being implemented — see session 7 below
 - **Issue #18** (model tests): Requires real API response payloads for snapshot testing
+
+---
+
+## 2026-02-10: Integration Tests for Export Pipeline (Session 7)
+
+### Issue #17: No Integration Tests for Export Pipeline
+
+Working on the most important gap in test coverage — the entire export flow from `ChannelExporter.export()` through `MessageExporter` to all 4 writers has zero tests.
+
+### Exploration Findings
+
+**Export pipeline data flow:**
+1. `ChannelExporter.export(request)` validates channel, creates `ExportContext`, creates `MessageExporter`
+2. Context calls `discord.get_channels()`, `discord.get_roles()` to populate caches
+3. Main loop: `async for message in discord.get_messages(...)` → filter → export
+4. For each message: `context.populate_member(user)` calls `discord.try_get_member()`
+5. `MessageExporter` manages writer lifecycle and partition rotation
+6. Writers write preamble → messages → postamble to binary file streams
+
+**Important discovery:** `ExportContext` (context.py:87) calls `self.discord.try_get_member()` but `DiscordClient` only has `get_member()`. The mock client must provide `try_get_member` to match.
+
+**Mock requirements — 4 methods needed:**
+- `get_channels(guild_id)` → `list[Channel]`
+- `get_roles(guild_id)` → `list[Role]`
+- `try_get_member(guild_id, user_id)` → `Member | None`
+- `get_messages(channel_id, after, before)` → `AsyncIterator[Message]`
+
+**Model construction:** All Pydantic models have `@model_validator(mode="before")` that expects raw API dicts. But they check for already-constructed data (e.g., `if "kind" in data: return data` for Channel). So we can pass keyword args directly to bypass API parsing.
+
+### Planned Test Coverage
+
+~25 integration tests across 9 classes covering:
+- All 5 export formats with content verification
+- Partition rotation (multiple output files)
+- Message filtering (from: and has:)
+- Empty channel handling (ChannelEmptyError + empty file creation)
+- Forum channel rejection
