@@ -526,3 +526,90 @@ Created 2 files with 27 integration tests across 9 test classes:
 - All 92 existing unit tests still pass (119 total)
 - Execution time: ~0.25s for full suite
 - GitHub issue #17 closed
+
+---
+
+## 2026-02-10: Comprehensive Unit Test Coverage (Session 8)
+
+### Issue #3: ~92% of Source Modules Have Zero Test Coverage
+
+The critical test coverage gap — only 4 of ~45 source modules had any tests. Tackled this with a parallel team of 5 agents, each writing tests for a separate test file to avoid conflicts.
+
+### Approach: Parallel Agent Team
+
+Spawned 5 specialized agents working simultaneously:
+
+| Agent | Test File | Scope | Tests Written |
+|-------|-----------|-------|---------------|
+| models-agent | `test_models.py` | All 14 Discord models, CDN, ExportFormat | 226 |
+| client-agent | `test_client.py` | DiscordClient, HTTP utils, asset downloader, Invite | 118 |
+| pipeline-agent | `test_export_pipeline.py` | ExportContext, ExportRequest, MessageExporter, exceptions | 102 |
+| filters-agent | `test_filters.py` | All filter is_match() methods, combinators | 71 |
+| visitors-agent | `test_markdown_visitors.py` | HTML + plaintext markdown visitors | 51 |
+
+Each agent received detailed instructions with:
+- The exact source code API to test (classes, methods, properties)
+- The project's existing test patterns to follow
+- Specific edge cases and boundary conditions to cover
+- Instructions to run tests and fix failures
+
+### Test Coverage Details
+
+**test_models.py (226 tests):**
+- ImageCdn: all 8 static URL builder methods, animated/static detection, variant selectors
+- User: direct + API construction, discriminator formatting, full_name, avatar fallback, bot flag, frozen
+- Channel: 12 ChannelKind properties, parent chain traversal, hierarchical name, message boundary checks, API dict with recipients/icons/threads
+- Guild: construction, API dict, DIRECT_MESSAGES sentinel, is_direct
+- Role: API color int→hex conversion, zero→None
+- Attachment: all file type detection properties, spoiler, size display (bytes/KB/MB/GB), API dict
+- Embed: all sub-models, API dict with all fields, unknown type→RICH fallback, color conversion
+- Embed projections: Spotify/YouTube/Twitch URL pattern matching
+- Emoji, Reaction, Sticker, Interaction, Member, MessageReference: construction + API dict
+- Message: all kind-based properties, is_empty edge cases, get_referenced_users, _normalize_embeds Twitter merging
+- ExportFormat: all enum values for file_extension, display_name, is_html
+
+**test_client.py (118 tests):**
+- Invite: URL code extraction with various formats
+- TokenKind: enum values
+- HTTP utils: _is_retryable_status (429/408/5xx), _is_retryable_response, _is_retryable_exception, _compute_retry_wait (Retry-After header + exponential backoff), create_async_client
+- Asset downloader: _is_url_allowed domain checking, _normalize_url, _get_file_name_from_url, _get_file_path hash-based paths, download reuse logic
+- DiscordClient: _auth_header (Bot/User prefix), _resolve_token_kind (bot-first detection, caching, invalid token error), _get_json error handling (401/403/404/500), _try_get_json, get_guild (DM shortcut), get_channels/get_member/get_roles (DM guild shortcuts), get_guilds pagination, rate limit handling, client lifecycle
+
+**test_export_pipeline.py (102 tests):**
+- ExportFormat: file_extension, display_name, is_html for all 5 formats
+- DiscordChatExporterError + ChannelEmptyError: message preservation, is_fatal flag, inheritance
+- _escape_filename: all illegal characters, path traversal prevention
+- _format_path: all 12 placeholder tokens with/without parents and dates
+- ExportRequest: absolute path resolution, default filenames, assets dir paths
+- ExportContext: normalize_date UTC on/off, format_date all 7 codes, populate caches, member caching + fallback creation, get_user_roles sorting, try_get_user_color
+- get_fallback_content: all 8 MessageKind system messages
+- _get_partition_file_path: naming convention for partitioned files
+
+**test_filters.py (71 tests):**
+- NullMessageFilter: always True, factory method
+- ContainsMessageFilter: basic match, case insensitivity, word boundaries (no partial "max"→"maximum"), punctuation boundaries, empty content, embed text searching (title, description, author, footer, field name/value)
+- FromMessageFilter: match by name, display_name, full_name, id, case insensitive
+- HasMessageFilter: all 8 content kinds (link, embed, file, video, image, sound, pin, invite), negative cases, invalid kind error, enum construction
+- MentionsMessageFilter: match by all user fields, case insensitive
+- ReactionMessageFilter: match by emoji name, id, code, case insensitive
+- BinaryExpressionMessageFilter: full AND/OR truth tables (4 cases each)
+- NegatedMessageFilter: inversion logic
+- Composed combinators: NOT(AND), OR(NOT,B), nested AND(OR,NOT)
+
+**test_markdown_visitors.py (51 tests):**
+- HtmlMarkdownVisitor (34 tests): plain text, XSS encoding, all 6 formatting kinds, inline/multiline code, user/channel/role mentions (known/unknown/deleted), @everyone/@here, auto/masked/Discord message links, custom emoji, headings, quotes, timestamps, jumbo emoji detection
+- PlainTextMarkdownVisitor (17 tests): passthrough, custom emoji→:name:, all mention types, voice channel [voice] suffix, timestamps, formatting preserved as-is, mixed content, deleted channel/role fallbacks
+
+### Execution
+
+- 4 agents completed autonomously (models, visitors, pipeline, client)
+- 1 agent (filters) stalled during execution — I wrote test_filters.py directly
+- All 5 test files written in parallel, no merge conflicts
+- Total wall-clock time: ~7 minutes for 568 new tests
+
+### Results
+
+- **687 total tests** (568 new + 119 existing), all passing
+- Execution time: ~0.47s for full suite
+- Test coverage went from 4/45 modules to comprehensive coverage across all source modules
+- GitHub issues #3 and #18 closed

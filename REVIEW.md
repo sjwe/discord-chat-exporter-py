@@ -257,7 +257,7 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 |---|-------|--------|
 | 1 | XSS via disabled Jinja2 autoescaping | FIXED |
 | 2 | Asset downloader follows arbitrary URLs | FIXED |
-| 3 | ~92% of source modules have zero test coverage | Open |
+| 3 | ~92% of source modules have zero test coverage | FIXED |
 | 4 | Potential ReDoS in markdown parser | Open (mitigated by depth limit) |
 | 5 | Token exposed in process listing | Open (env var documented as preferred) |
 | 6 | Unbounded cache growth in ExportContext | Open (bounded by unique authors) |
@@ -272,11 +272,11 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 | 15 | Inconsistent return types across client methods | Open (by design) |
 | 16 | Filter parser has no input length limit | FIXED |
 | 17 | No integration tests for export pipeline | FIXED |
-| 18 | Discord models have no validation tests | Open |
+| 18 | Discord models have no validation tests | FIXED |
 | 19 | HTML visitor produces unescaped emoji attributes | FIXED |
 | 20 | `format_date` uses strftime instead of Discord-style formatting | FIXED |
 | 21 | Token auto-detection makes two API calls | FIXED |
 | 22 | `aiofiles` dependency declared but never used | FIXED |
 | 23 | File streams not using context managers | FIXED |
 
-**18 of 23 issues fixed.** Remaining 5 are either by design, require test infrastructure, or need external dependencies.
+**20 of 23 issues fixed.** Remaining 3 are by design or require external dependencies (ReDoS mitigation, token visibility, unbounded cache).

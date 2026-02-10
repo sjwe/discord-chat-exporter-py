@@ -217,14 +217,20 @@ pyproject.toml
   - Full export tests for all 5 formats (PlainText, CSV, JSON, HTML Dark, HTML Light)
   - Partition rotation, message filtering, empty channel, forum channel rejection
   - 27 integration tests across 9 test classes in `tests/test_export_integration.py`
-  - Total test suite: 119 tests, all passing
+- Comprehensive unit tests for all untested modules (Issue #3) — COMPLETE (568 new tests)
+  - `test_models.py` (226 tests) — All 14 Discord models, CDN URL builders, ExportFormat
+  - `test_client.py` (118 tests) — DiscordClient, HTTP utils, Invite, asset downloader
+  - `test_export_pipeline.py` (102 tests) — ExportContext, ExportRequest, MessageExporter, exceptions
+  - `test_filters.py` (71 tests) — All filter is_match() methods, combinators, composed filters
+  - `test_markdown_visitors.py` (51 tests) — HTML + plaintext markdown visitors
+  - Total test suite: **687 tests**, all passing in ~0.5s
 - README with usage, token setup, format docs, filter DSL docs — COMPLETE
 
 ---
 
 ## Verification
 
-1. **Unit tests**: `pytest tests/` - covers Snowflake, markdown parsing, filter DSL, partition limits, model parsing
+1. **Unit tests**: `pytest tests/` - 687 tests covering all models, client, pipeline, filters, visitors, parsers
 2. **Manual test**: Run `discord-chat-exporter guilds -t <token>` to verify API connectivity
 3. **Export test**: Export a known channel in all 5 formats, compare output structure against C# tool output
 4. **Media test**: Run with `--media` flag, verify assets downloaded and referenced correctly in HTML
