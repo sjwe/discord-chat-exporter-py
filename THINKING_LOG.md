@@ -487,11 +487,42 @@ Working on the most important gap in test coverage — the entire export flow fr
 
 **Model construction:** All Pydantic models have `@model_validator(mode="before")` that expects raw API dicts. But they check for already-constructed data (e.g., `if "kind" in data: return data` for Channel). So we can pass keyword args directly to bypass API parsing.
 
-### Planned Test Coverage
+### Implementation Complete
 
-~25 integration tests across 9 classes covering:
-- All 5 export formats with content verification
-- Partition rotation (multiple output files)
-- Message filtering (from: and has:)
-- Empty channel handling (ChannelEmptyError + empty file creation)
-- Forum channel rejection
+Created 2 files with 27 integration tests across 9 test classes:
+
+**`tests/conftest.py`** — Shared fixtures and mock client:
+- `MockDiscordClient` — duck-typed class with the 4 methods the export pipeline actually calls (`get_channels`, `get_roles`, `try_get_member`, `get_messages` as async generator)
+- 7 fixtures: `mock_guild`, `mock_channel`, `mock_user`, `mock_user_2`, `mock_role`, `mock_messages` (5 messages: basic text, attachment, reaction, embed, reply)
+- `export_to_format()` — async helper that wires up MockDiscordClient → ChannelExporter.export() → reads output file
+
+**`tests/test_export_integration.py`** — 27 tests:
+
+| Test Class | Tests | What's Verified |
+|---|---|---|
+| `TestPlainTextExport` | 4 | Preamble header, message content, attachment URLs, reactions (emoji+count), UTF-8 encoding |
+| `TestCsvExport` | 4 | Header row, row count (6 = header + 5 messages), parsed field values, attachment URLs, reactions |
+| `TestJsonExport` | 7 | JSON structure, guild/channel info, message content + author, attachments, reactions, messageCount consistency |
+| `TestHtmlDarkExport` | 4 | Valid HTML structure, dark theme CSS colors, content in DOM, author names |
+| `TestHtmlLightExport` | 2 | Valid HTML, light theme variant |
+| `TestPartitionRotation` | 2 | Multiple output files with `[part N]` naming, valid per-partition JSON, total message count |
+| `TestMessageFiltering` | 2 | `from:testuser` filter, `has:image` filter — verify only matching messages in output |
+| `TestEmptyChannel` | 1 | `ChannelEmptyError` raised, empty file still created (exporter.close() runs in finally) |
+| `TestForumChannel` | 1 | `DiscordChatExporterError` raised with "forum" in message |
+
+### Key Design Decisions
+
+1. **Duck-typed mock** — `MockDiscordClient` is not a subclass of `DiscordClient`, just provides the same method signatures. This avoids importing the real client's HTTP dependencies and is sufficient since Python uses structural typing at runtime.
+
+2. **Direct model construction** — All Pydantic models have `@model_validator(mode="before")` that checks for already-constructed data (e.g., `if "kind" in data: return data` for Channel). Passing keyword args directly bypasses API JSON parsing, which is exactly what we want for fixtures.
+
+3. **UTC normalization enabled** — All tests use `is_utc_normalization_enabled=True` to get deterministic timestamps regardless of local timezone.
+
+4. **Async generator for messages** — `get_messages()` uses `async for` yield, matching the real client's async iterator pattern.
+
+### Results
+
+- All 27 new integration tests pass
+- All 92 existing unit tests still pass (119 total)
+- Execution time: ~0.25s for full suite
+- GitHub issue #17 closed

@@ -212,11 +212,12 @@ pyproject.toml
 
 ### Phase 7: Tests + Polish
 - Unit tests for Snowflake, models, markdown, filters, partition limits — COMPLETE (92 tests)
-- Integration tests for export pipeline (Issue #17) — IN PROGRESS
+- Integration tests for export pipeline (Issue #17) — COMPLETE (27 tests)
   - MockDiscordClient with fixture data in `tests/conftest.py`
   - Full export tests for all 5 formats (PlainText, CSV, JSON, HTML Dark, HTML Light)
   - Partition rotation, message filtering, empty channel, forum channel rejection
-  - ~25 new integration tests across 9 test classes in `tests/test_export_integration.py`
+  - 27 integration tests across 9 test classes in `tests/test_export_integration.py`
+  - Total test suite: 119 tests, all passing
 - README with usage, token setup, format docs, filter DSL docs — COMPLETE
 
 ---
