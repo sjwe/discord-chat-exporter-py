@@ -39,6 +39,7 @@ from discord_chat_exporter.core.markdown.nodes import (
 # ---------------------------------------------------------------------------
 
 _MAX_DEPTH = 32
+_MAX_INPUT_LENGTH = 4000
 
 
 @dataclass(frozen=True)
@@ -196,7 +197,7 @@ def _mk_bold() -> _Matcher:
 
 
 def _mk_italic() -> _Matcher:
-    pat = re.compile(r"\*(?!\s)(.+?)(?<!\s|\*)\*(?!\*)", _BASE_S)
+    pat = re.compile(r"\*(?!\s)([^*\s][^*]*[^*\s]|[^*\s])\*(?!\*)", _BASE)
 
     def _t(d: int, s: _Segment, m: re.Match[str]) -> MarkdownNode:
         return FormattingNode(FormattingKind.ITALIC, _parse(d, _seg_from_group(s, m, 1), _NODE_MATCHER))
@@ -217,7 +218,7 @@ def _mk_italic_bold() -> _Matcher:
 
 
 def _mk_italic_alt() -> _Matcher:
-    pat = re.compile(r"_(.+?)_(?!\w)", _BASE_S)
+    pat = re.compile(r"_([^_]+)_(?!\w)", _BASE)
 
     def _t(d: int, s: _Segment, m: re.Match[str]) -> MarkdownNode:
         return FormattingNode(FormattingKind.ITALIC, _parse(d, _seg_from_group(s, m, 1), _NODE_MATCHER))
@@ -700,6 +701,8 @@ def _init_matchers() -> None:
 
 def parse(markdown: str) -> list[MarkdownNode]:
     """Parse Discord markdown text into an AST (full formatting)."""
+    if len(markdown) > _MAX_INPUT_LENGTH:
+        return [TextNode(markdown)]
     _init_matchers()
     segment = _Segment(markdown, 0, len(markdown))
     return _parse(0, segment, _NODE_MATCHER)
@@ -707,6 +710,8 @@ def parse(markdown: str) -> list[MarkdownNode]:
 
 def parse_minimal(markdown: str) -> list[MarkdownNode]:
     """Parse Discord markdown text into an AST (minimal - mentions, emoji, timestamps only)."""
+    if len(markdown) > _MAX_INPUT_LENGTH:
+        return [TextNode(markdown)]
     _init_matchers()
     segment = _Segment(markdown, 0, len(markdown))
     return _parse(0, segment, _MINIMAL_NODE_MATCHER)

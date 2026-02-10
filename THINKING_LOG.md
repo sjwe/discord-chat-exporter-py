@@ -452,7 +452,7 @@ Implemented fixes for 17 of the 23 review issues. All 92 existing tests pass aft
 ### Issues NOT Fixed (by design)
 
 - **Issue #3** (test coverage): Meta-issue, not a code fix
-- **Issue #4** (ReDoS): Would require the `regex` module for atomic groups; the depth limit mitigates the risk
+- **Issue #4** (ReDoS): Fixed in Session 9 — see below
 - **Issue #5** (token in `ps`): CLI arg visibility is a known limitation; env var is documented as preferred
 - **Issue #6** (unbounded member cache): Members are small and the cache is bounded by unique authors in the export
 - **Issue #15** (inconsistent return types): Design choice — guilds are paginated, channels are not
@@ -613,3 +613,71 @@ Each agent received detailed instructions with:
 - Execution time: ~0.47s for full suite
 - Test coverage went from 4/45 modules to comprehensive coverage across all source modules
 - GitHub issues #3 and #18 closed
+
+---
+
+## 2026-02-10: ReDoS Fix for Markdown Parser (Session 9)
+
+### Issue #4: Potential ReDoS in Markdown Parser Regex Patterns
+
+The markdown parser uses `.+?` with `re.DOTALL` in several regex patterns. The issue flagged bold, italic, and list patterns as vulnerable to catastrophic backtracking on pathological input.
+
+### Investigation & Benchmarking
+
+Thorough benchmarking revealed the actual vulnerability profile:
+
+**Actually vulnerable (confirmed by benchmarking):**
+- **Italic** `\*(?!\s)(.+?)(?<!\s|\*)\*(?!\*)` — 193x slower on adversarial star-heavy input. The `.+?` combined with the `(?<!\s|\*)` lookbehind explores many candidate positions before failing.
+- **Italic_alt** `_(.+?)_(?!\w)` — 65x slower on adversarial underscore-heavy input.
+
+**NOT vulnerable (confirmed safe):**
+- **Bold** `\*\*(.+?)\*\*(?!\*)` — Two-char `**` delimiter allows fast skip. Sub-ms on adversarial input.
+- **Underline**, **strikethrough**, **spoiler** — All use two-char delimiters (`__`, `~~`, `||`). Sub-ms.
+- **List** `^(\s*)(?:[\-\*]\s(.+(?:\n\s\1.*)*)?\n?)+` — Despite nested quantifiers, the `\s` vs `[\-\*]` character class distinction prevents ambiguity. Sub-ms.
+
+**Root cause:** The aggregate matcher tries all 28+ patterns at every text position. For 4000-char star-heavy input, this creates ~9,265 regex `.search()` calls, with the italic pattern accounting for 96% of total time.
+
+### Fix Applied
+
+**Approach: Input length cap + targeted regex rewrites (no new dependencies)**
+
+1. **Added `_MAX_INPUT_LENGTH = 4000`** — Discord's message limit. Over-length input returns `[TextNode(markdown)]` as graceful degradation.
+
+2. **Rewrote italic pattern:**
+   - Old: `\*(?!\s)(.+?)(?<!\s|\*)\*(?!\*)` with DOTALL
+   - New: `\*(?!\s)([^*\s][^*]*[^*\s]|[^*\s])\*(?!\*)` without DOTALL
+   - Uses `[^*]` character class to eliminate backtracking
+   - Alternation handles multi-char and single-char content
+
+3. **Rewrote italic_alt pattern:**
+   - Old: `_(.+?)_(?!\w)` with DOTALL
+   - New: `_([^_]+)_(?!\w)` without DOTALL
+
+4. **Added 14 ReDoS-specific tests** covering length caps, adversarial inputs, and pattern correctness.
+
+### Key Design Decision
+
+Chose NOT to add the `regex` module dependency. The standard `re` module is sufficient — the vulnerability is solved by eliminating `.+?` in the two slow patterns, not by needing atomic groups. Also chose NOT to rewrite patterns confirmed safe by benchmarking (bold, underline, strikethrough, spoiler, list) to avoid unnecessary regression risk.
+
+### Implementation
+
+Changes applied to 2 files:
+
+**`core/markdown/parser.py`:**
+- Added `_MAX_INPUT_LENGTH = 4000` constant (line 42, after `_MAX_DEPTH`)
+- Rewrote italic pattern (line 200): `\*(?!\s)([^*\s][^*]*[^*\s]|[^*\s])\*(?!\*)` with `_BASE` (no DOTALL)
+- Rewrote italic_alt pattern (line 221): `_([^_]+)_(?!\w)` with `_BASE` (no DOTALL)
+- Added length guard at top of `parse()` and `parse_minimal()`: `if len(markdown) > _MAX_INPUT_LENGTH: return [TextNode(markdown)]`
+
+**`tests/test_markdown_parser.py`:**
+- Added `TestReDoSProtection` class with 14 tests:
+  - 5 input length cap tests (parse, parse_minimal, extract_emojis, extract_links, boundary at 4000)
+  - 4 adversarial timing tests (star/underscore/tilde chaos, unclosed bold — all < 1s)
+  - 3 italic pattern correctness tests (single char, no stars, multi-word)
+  - 2 italic_alt pattern correctness tests (basic, multi-word)
+
+### Results
+
+- 4000-char star chaos: 10.4s → ~0.076s (137x improvement)
+- All 701 tests pass (687 existing + 14 new) in ~0.47s
+- GitHub issue #4 closed

@@ -223,14 +223,18 @@ pyproject.toml
   - `test_export_pipeline.py` (102 tests) — ExportContext, ExportRequest, MessageExporter, exceptions
   - `test_filters.py` (71 tests) — All filter is_match() methods, combinators, composed filters
   - `test_markdown_visitors.py` (51 tests) — HTML + plaintext markdown visitors
-  - Total test suite: **687 tests**, all passing in ~0.5s
+  - Total test suite: **701 tests**, all passing in ~0.5s
+- ReDoS fix for markdown parser (Issue #4) — COMPLETE (14 new tests)
+  - Added `_MAX_INPUT_LENGTH = 4000` constant with length guards in `parse()` and `parse_minimal()`
+  - Rewrote italic and italic_alt regex patterns to eliminate `.+?` backtracking (137x faster)
+  - 14 ReDoS-specific tests in `test_markdown_parser.py`
 - README with usage, token setup, format docs, filter DSL docs — COMPLETE
 
 ---
 
 ## Verification
 
-1. **Unit tests**: `pytest tests/` - 687 tests covering all models, client, pipeline, filters, visitors, parsers
+1. **Unit tests**: `pytest tests/` - 701 tests covering all models, client, pipeline, filters, visitors, parsers, ReDoS protection
 2. **Manual test**: Run `discord-chat-exporter guilds -t <token>` to verify API connectivity
 3. **Export test**: Export a known channel in all 5 formats, compare output structure against C# tool output
 4. **Media test**: Run with `--media` flag, verify assets downloaded and referenced correctly in HTML

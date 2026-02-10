@@ -78,6 +78,8 @@ The list pattern is especially concerning due to nested repetition. A crafted me
 
 **Recommendation:** Add input length limits before parsing. Consider atomic groups or possessive quantifiers (via the `regex` module). The existing `_MAX_DEPTH = 32` helps but doesn't prevent regex-level backtracking.
 
+**Fix applied:** Added `_MAX_INPUT_LENGTH = 4000` constant (Discord's message limit) with length guards in `parse()` and `parse_minimal()` that return `[TextNode(markdown)]` for over-length input. Rewrote the italic pattern (`\*(?!\s)(.+?)(?<!\s|\*)\*(?!\*)` → `\*(?!\s)([^*\s][^*]*[^*\s]|[^*\s])\*(?!\*)`) and italic_alt pattern (`_(.+?)_(?!\w)` → `_([^_]+)_(?!\w)`) to eliminate `.+?` backtracking. Benchmarking confirmed 137x improvement on adversarial input. Other patterns (bold, underline, strikethrough, spoiler, list) confirmed safe via benchmarking — no changes needed. Added 14 ReDoS-specific tests.
+
 ### 5. Token Exposed in Process Listing
 
 **Severity:** High | **Category:** Security
@@ -258,7 +260,7 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 | 1 | XSS via disabled Jinja2 autoescaping | FIXED |
 | 2 | Asset downloader follows arbitrary URLs | FIXED |
 | 3 | ~92% of source modules have zero test coverage | FIXED |
-| 4 | Potential ReDoS in markdown parser | Open (mitigated by depth limit) |
+| 4 | Potential ReDoS in markdown parser | FIXED |
 | 5 | Token exposed in process listing | Open (env var documented as preferred) |
 | 6 | Unbounded cache growth in ExportContext | Open (bounded by unique authors) |
 | 7 | Asset downloader creates new HTTP client per download | FIXED |
@@ -279,4 +281,4 @@ The `format_date()` method uses Python's `strftime` with format codes like `%x %
 | 22 | `aiofiles` dependency declared but never used | FIXED |
 | 23 | File streams not using context managers | FIXED |
 
-**20 of 23 issues fixed.** Remaining 3 are by design or require external dependencies (ReDoS mitigation, token visibility, unbounded cache).
+**21 of 23 issues fixed.** Remaining 2 are by design (token visibility, unbounded cache).

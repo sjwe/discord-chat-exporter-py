@@ -262,3 +262,112 @@ class TestSpecialCases:
         has_formatting = any(isinstance(n, FormattingNode) for n in nodes)
         assert has_mention
         assert not has_formatting
+
+
+import time
+
+
+class TestReDoSProtection:
+    """Tests for ReDoS vulnerability mitigations (Issue #4)."""
+
+    # --- Input length cap ---
+
+    def test_parse_rejects_overlength_input(self):
+        long_input = "a" * 4001
+        nodes = parse(long_input)
+        assert len(nodes) == 1
+        assert isinstance(nodes[0], TextNode)
+        assert nodes[0].text == long_input
+
+    def test_parse_minimal_rejects_overlength_input(self):
+        long_input = "a" * 4001
+        nodes = parse_minimal(long_input)
+        assert len(nodes) == 1
+        assert isinstance(nodes[0], TextNode)
+        assert nodes[0].text == long_input
+
+    def test_extract_emojis_safe_on_overlength(self):
+        long_input = "<:LUL:123>" + "a" * 4000
+        emojis = extract_emojis(long_input)
+        assert emojis == []
+
+    def test_extract_links_safe_on_overlength(self):
+        long_input = "https://example.com " + "a" * 4000
+        links = extract_links(long_input)
+        assert links == []
+
+    def test_input_at_max_length_still_parses(self):
+        text = "a" * 4000
+        nodes = parse(text)
+        assert len(nodes) == 1
+        assert isinstance(nodes[0], TextNode)
+        assert nodes[0].text == text
+
+    # --- Star chaos (adversarial italic input) ---
+
+    def test_star_chaos_completes_fast(self):
+        adversarial = "*" * 4000
+        start = time.monotonic()
+        parse(adversarial)
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0, f"Star chaos took {elapsed:.2f}s (should be < 1s)"
+
+    def test_underscore_chaos_completes_fast(self):
+        adversarial = "_" * 4000
+        start = time.monotonic()
+        parse(adversarial)
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0, f"Underscore chaos took {elapsed:.2f}s (should be < 1s)"
+
+    def test_tilde_chaos_completes_fast(self):
+        adversarial = "~" * 4000
+        start = time.monotonic()
+        parse(adversarial)
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0, f"Tilde chaos took {elapsed:.2f}s (should be < 1s)"
+
+    def test_unclosed_bold_does_not_hang(self):
+        adversarial = "**" + "a" * 3996 + "**"
+        start = time.monotonic()
+        parse(adversarial)
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0, f"Unclosed bold took {elapsed:.2f}s (should be < 1s)"
+
+    # --- Italic pattern correctness ---
+
+    def test_italic_single_char(self):
+        nodes = parse("*a*")
+        assert len(nodes) == 1
+        assert isinstance(nodes[0], FormattingNode)
+        assert nodes[0].kind == FormattingKind.ITALIC
+        assert _text(nodes[0].children) == "a"
+
+    def test_italic_no_stars_in_content(self):
+        nodes = parse("*hello world*")
+        assert len(nodes) == 1
+        assert isinstance(nodes[0], FormattingNode)
+        assert nodes[0].kind == FormattingKind.ITALIC
+        assert _text(nodes[0].children) == "hello world"
+
+    def test_italic_multi_word(self):
+        nodes = parse("*foo bar baz*")
+        assert len(nodes) == 1
+        assert isinstance(nodes[0], FormattingNode)
+        assert nodes[0].kind == FormattingKind.ITALIC
+        assert _text(nodes[0].children) == "foo bar baz"
+
+    # --- Italic_alt pattern correctness ---
+
+    def test_italic_alt_basic(self):
+        nodes = parse("_hello_")
+        assert len(nodes) == 1
+        assert isinstance(nodes[0], FormattingNode)
+        assert nodes[0].kind == FormattingKind.ITALIC
+        assert _text(nodes[0].children) == "hello"
+
+    def test_italic_alt_multi_word(self):
+        nodes = parse("_foo bar baz_")
+        assert len(nodes) == 1
+        assert isinstance(nodes[0], FormattingNode)
+        assert nodes[0].kind == FormattingKind.ITALIC
+        assert _text(nodes[0].children) == "foo bar baz"
