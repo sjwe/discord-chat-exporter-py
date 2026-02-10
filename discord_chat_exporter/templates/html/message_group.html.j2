@@ -1,0 +1,340 @@
+<div class="chatlog__message-group">
+{% for msg in messages %}
+    <div id="chatlog__message-container-{{ msg.id }}" class="chatlog__message-container {{ 'chatlog__message-container--pinned' if msg.is_pinned else '' }}" data-message-id="{{ msg.id }}">
+        <div class="chatlog__message">
+            {% if msg.is_system %}
+            {# System notification #}
+            <div class="chatlog__message-aside">
+                <svg class="chatlog__system-notification-icon">
+                    <use href="#{{ msg.sys_icon }}"></use>
+                </svg>
+            </div>
+            <div class="chatlog__message-primary">
+                <span class="chatlog__system-notification-author" {% if msg.author_color %}style="color: {{ msg.author_color }}"{% endif %} title="{{ msg.author_full_name }}" data-user-id="{{ msg.author_id }}">{{ msg.author_display_name }}</span>
+                <span> </span>
+                <span class="chatlog__system-notification-content">{{ msg.sys_html }}</span>
+                <span class="chatlog__system-notification-timestamp" title="{{ msg.ts_full }}">
+                    <a href="#chatlog__message-container-{{ msg.id }}">{{ msg.ts_display }}</a>
+                </span>
+            </div>
+            {% else %}
+            {# Regular message #}
+            <div class="chatlog__message-aside">
+                {% if msg.is_first %}
+                    {% if msg.is_reply_like %}
+                    <div class="chatlog__reply-symbol"></div>
+                    {% endif %}
+                    <img class="chatlog__avatar" src="{{ msg.author_avatar_url }}" alt="Avatar" loading="lazy">
+                {% else %}
+                    <div class="chatlog__short-timestamp" title="{{ msg.ts_full }}">{{ msg.ts_short }}</div>
+                {% endif %}
+            </div>
+
+            <div class="chatlog__message-primary">
+                {% if msg.is_first %}
+                    {# Reply reference #}
+                    {% if msg.is_reply_like and msg.reply %}
+                    <div class="chatlog__reply">
+                        {% if msg.reply.kind == 'message' %}
+                            <img class="chatlog__reply-avatar" src="{{ msg.reply.avatar_url }}" alt="Avatar" loading="lazy">
+                            <div class="chatlog__reply-author" {% if msg.reply.color %}style="color: {{ msg.reply.color }}"{% endif %} title="{{ msg.reply.full_name }}">{{ msg.reply.name }}</div>
+                            <div class="chatlog__reply-content">
+                                <span class="chatlog__reply-link" onclick="scrollToMessage(event, '{{ msg.reply.id }}')">
+                                    {% if msg.reply.has_content %}
+                                        {{ msg.reply.html }}
+                                    {% elif msg.reply.has_attachments %}
+                                        <em>Click to see attachment</em>
+                                    {% else %}
+                                        <em>Click to see original message</em>
+                                    {% endif %}
+                                </span>
+                                {% if msg.reply.edited_ts %}
+                                <span class="chatlog__reply-edited-timestamp" title="{{ msg.reply.edited_ts }}">(edited)</span>
+                                {% endif %}
+                            </div>
+                        {% elif msg.reply.kind == 'interaction' %}
+                            <img class="chatlog__reply-avatar" src="{{ msg.reply.avatar_url }}" alt="Avatar" loading="lazy">
+                            <div class="chatlog__reply-author" {% if msg.reply.color %}style="color: {{ msg.reply.color }}"{% endif %} title="{{ msg.reply.full_name }}">{{ msg.reply.name }}</div>
+                            <div class="chatlog__reply-content">
+                                used /{{ msg.reply.command }}
+                            </div>
+                        {% else %}
+                            <div class="chatlog__reply-unknown">
+                                Original message was deleted or could not be loaded.
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {# Header #}
+                    <div class="chatlog__header">
+                        <span class="chatlog__author" {% if msg.author_color %}style="color: {{ msg.author_color }}"{% endif %} title="{{ msg.author_full_name }}" data-user-id="{{ msg.author_id }}">{{ msg.author_display_name }}</span>
+                        {% if msg.is_bot %}
+                            {% if msg.is_crosspost %}
+                            <span class="chatlog__author-tag">SERVER</span>
+                            {% else %}
+                            <span class="chatlog__author-tag">BOT</span>
+                            {% endif %}
+                        {% endif %}
+                        <span class="chatlog__timestamp" title="{{ msg.ts_full }}"><a href="#chatlog__message-container-{{ msg.id }}">{{ msg.ts_display }}</a></span>
+                    </div>
+                {% endif %}
+
+                {# Content #}
+                {% if msg.has_content or msg.edited_ts %}
+                <div class="chatlog__content chatlog__markdown">
+                    {% if msg.has_content %}
+                    <span class="chatlog__markdown-preserve">{{ msg.content_html }}</span>
+                    {% endif %}
+                    {% if msg.edited_ts %}
+                    <span class="chatlog__edited-timestamp" title="{{ msg.edited_ts }}">(edited)</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {# Attachments #}
+                {% for att in msg.attachments %}
+                <div class="chatlog__attachment {{ 'chatlog__attachment--hidden' if att.is_spoiler else '' }}" {% if att.is_spoiler %}onclick="showSpoiler(event, this)"{% endif %}>
+                    {% if att.is_spoiler %}
+                    <div class="chatlog__attachment-spoiler-caption">SPOILER</div>
+                    {% endif %}
+                    {% if att.is_image %}
+                    <a href="{{ att.url }}">
+                        <img class="chatlog__attachment-media" src="{{ att.url }}" alt="{{ att.description or 'Image attachment' }}" title="Image: {{ att.file_name }} ({{ att.file_size }})" loading="lazy">
+                    </a>
+                    {% elif att.is_video %}
+                    <video class="chatlog__attachment-media" controls>
+                        <source src="{{ att.url }}" alt="{{ att.description or 'Video attachment' }}" title="Video: {{ att.file_name }} ({{ att.file_size }})">
+                    </video>
+                    {% elif att.is_audio %}
+                    <audio class="chatlog__attachment-media" controls>
+                        <source src="{{ att.url }}" alt="{{ att.description or 'Audio attachment' }}" title="Audio: {{ att.file_name }} ({{ att.file_size }})">
+                    </audio>
+                    {% else %}
+                    <div class="chatlog__attachment-generic">
+                        <svg class="chatlog__attachment-generic-icon">
+                            <use href="#attachment-icon"/>
+                        </svg>
+                        <div class="chatlog__attachment-generic-name">
+                            <a href="{{ att.url }}">{{ att.file_name }}</a>
+                        </div>
+                        <div class="chatlog__attachment-generic-size">{{ att.file_size }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                {# Embeds #}
+                {% for embed in msg.embeds %}
+                    {% if embed.type == 'spotify' %}
+                    <div class="chatlog__embed">
+                        <div class="chatlog__embed-spotify-container">
+                            <iframe class="chatlog__embed-spotify" src="{{ embed.url }}" width="400" height="80" allowtransparency="true" allow="encrypted-media"></iframe>
+                        </div>
+                    </div>
+
+                    {% elif embed.type == 'youtube' %}
+                    <div class="chatlog__embed">
+                        {% if embed.color_css %}
+                        <div class="chatlog__embed-color-pill" style="background-color: {{ embed.color_css }}"></div>
+                        {% else %}
+                        <div class="chatlog__embed-color-pill chatlog__embed-color-pill--default"></div>
+                        {% endif %}
+                        <div class="chatlog__embed-content-container">
+                            <div class="chatlog__embed-content">
+                                <div class="chatlog__embed-text">
+                                    {% if embed.author is defined and embed.author %}
+                                    <div class="chatlog__embed-author-container">
+                                        {% if embed.author.icon_url is defined and embed.author.icon_url %}
+                                        <img class="chatlog__embed-author-icon" src="{{ embed.author.icon_url }}" alt="Author icon" loading="lazy" onerror="this.style.visibility='hidden'">
+                                        {% endif %}
+                                        {% if embed.author.name is defined and embed.author.name %}
+                                            {% if embed.author.url %}
+                                            <a class="chatlog__embed-author-link" href="{{ embed.author.url }}">
+                                                <div class="chatlog__embed-author">{{ embed.author.name }}</div>
+                                            </a>
+                                            {% else %}
+                                            <div class="chatlog__embed-author">{{ embed.author.name }}</div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    {% if embed.title_html is defined and embed.title_html %}
+                                    <div class="chatlog__embed-title">
+                                        {% if embed.title_url %}
+                                        <a class="chatlog__embed-title-link" href="{{ embed.title_url }}">
+                                            <div class="chatlog__markdown chatlog__markdown-preserve">{{ embed.title_html }}</div>
+                                        </a>
+                                        {% else %}
+                                        <div class="chatlog__markdown chatlog__markdown-preserve">{{ embed.title_html }}</div>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <div class="chatlog__embed-youtube-container">
+                                        <iframe class="chatlog__embed-youtube" src="{{ embed.video_url }}" width="400" height="225"></iframe>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% elif embed.type == 'image' %}
+                    <div class="chatlog__embed">
+                        <a href="{{ embed.url }}">
+                            <img class="chatlog__embed-generic-image" src="{{ embed.url }}" alt="Embedded image" loading="lazy" data-canonical-url="{{ embed.canonical_url }}">
+                        </a>
+                    </div>
+
+                    {% elif embed.type == 'video' %}
+                    <div class="chatlog__embed">
+                        <video class="chatlog__embed-generic-video" {% if embed.width %}width="{{ embed.width }}"{% endif %} {% if embed.height %}height="{{ embed.height }}"{% endif %} controls data-canonical-url="{{ embed.canonical_url }}">
+                            <source src="{{ embed.url }}" alt="Embedded video">
+                        </video>
+                    </div>
+
+                    {% elif embed.type == 'gifv' %}
+                    <div class="chatlog__embed">
+                        <video class="chatlog__embed-generic-gifv" {% if embed.width %}width="{{ embed.width }}"{% endif %} {% if embed.height %}height="{{ embed.height }}"{% endif %} loop onmouseover="this.play()" onmouseout="this.pause()" data-canonical-url="{{ embed.canonical_url }}">
+                            <source src="{{ embed.url }}" alt="Embedded gifv">
+                        </video>
+                    </div>
+
+                    {% elif embed.type == 'rich' %}
+                    <div class="chatlog__embed">
+                        {% if embed.color_css %}
+                        <div class="chatlog__embed-color-pill" style="background-color: {{ embed.color_css }}"></div>
+                        {% else %}
+                        <div class="chatlog__embed-color-pill chatlog__embed-color-pill--default"></div>
+                        {% endif %}
+
+                        <div class="chatlog__embed-content-container">
+                            <div class="chatlog__embed-content">
+                                <div class="chatlog__embed-text">
+                                    {# Author #}
+                                    {% if embed.author is defined and embed.author %}
+                                    <div class="chatlog__embed-author-container">
+                                        {% if embed.author.icon_url is defined and embed.author.icon_url %}
+                                        <img class="chatlog__embed-author-icon" src="{{ embed.author.icon_url }}" alt="Author icon" loading="lazy" onerror="this.style.visibility='hidden'">
+                                        {% endif %}
+                                        {% if embed.author.name is defined and embed.author.name %}
+                                            {% if embed.author.url %}
+                                            <a class="chatlog__embed-author-link" href="{{ embed.author.url }}">
+                                                <div class="chatlog__embed-author">{{ embed.author.name }}</div>
+                                            </a>
+                                            {% else %}
+                                            <div class="chatlog__embed-author">{{ embed.author.name }}</div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+
+                                    {# Title #}
+                                    {% if embed.title_html is defined and embed.title_html %}
+                                    <div class="chatlog__embed-title">
+                                        {% if embed.title_url %}
+                                        <a class="chatlog__embed-title-link" href="{{ embed.title_url }}">
+                                            <div class="chatlog__markdown chatlog__markdown-preserve">{{ embed.title_html }}</div>
+                                        </a>
+                                        {% else %}
+                                        <div class="chatlog__markdown chatlog__markdown-preserve">{{ embed.title_html }}</div>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+
+                                    {# Description #}
+                                    {% if embed.description_html is defined and embed.description_html %}
+                                    <div class="chatlog__embed-description">
+                                        <div class="chatlog__markdown chatlog__markdown-preserve">{{ embed.description_html }}</div>
+                                    </div>
+                                    {% endif %}
+
+                                    {# Fields #}
+                                    {% if embed.fields is defined and embed.fields %}
+                                    <div class="chatlog__embed-fields">
+                                        {% for field in embed.fields %}
+                                        <div class="chatlog__embed-field {{ 'chatlog__embed-field--inline' if field.is_inline else '' }}">
+                                            {% if field.name_html is defined and field.name_html %}
+                                            <div class="chatlog__embed-field-name">
+                                                <div class="chatlog__markdown chatlog__markdown-preserve">{{ field.name_html }}</div>
+                                            </div>
+                                            {% endif %}
+                                            {% if field.value_html is defined and field.value_html %}
+                                            <div class="chatlog__embed-field-value">
+                                                <div class="chatlog__markdown chatlog__markdown-preserve">{{ field.value_html }}</div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+
+                                {# Thumbnail #}
+                                {% if embed.thumbnail is defined and embed.thumbnail %}
+                                <div class="chatlog__embed-thumbnail-container">
+                                    <a class="chatlog__embed-thumbnail-link" href="{{ embed.thumbnail.url }}">
+                                        <img class="chatlog__embed-thumbnail" src="{{ embed.thumbnail.url }}" alt="Thumbnail" loading="lazy" data-canonical-url="{{ embed.thumbnail.canonical_url }}">
+                                    </a>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            {# Images #}
+                            {% if embed.images is defined and embed.images %}
+                            <div class="chatlog__embed-images {{ 'chatlog__embed-images--single' if embed.images|length == 1 else '' }}">
+                                {% for image in embed.images %}
+                                <div class="chatlog__embed-image-container">
+                                    <a class="chatlog__embed-image-link" href="{{ image.url }}">
+                                        <img class="chatlog__embed-image" src="{{ image.url }}" alt="Image" loading="lazy" data-canonical-url="{{ image.canonical_url }}">
+                                    </a>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            {# Footer #}
+                            {% if embed.footer is defined and embed.footer %}
+                            <div class="chatlog__embed-footer">
+                                {% if embed.footer.icon_url is defined and embed.footer.icon_url %}
+                                <img class="chatlog__embed-footer-icon" src="{{ embed.footer.icon_url }}" alt="Footer icon" loading="lazy">
+                                {% endif %}
+                                <span class="chatlog__embed-footer-text">
+                                    {% if embed.footer.text is defined and embed.footer.text %}{{ embed.footer.text }}{% endif %}
+                                    {% if embed.footer.text is defined and embed.footer.text and embed.footer.timestamp is defined and embed.footer.timestamp %} &bull; {% endif %}
+                                    {% if embed.footer.timestamp is defined and embed.footer.timestamp %}{{ embed.footer.timestamp }}{% endif %}
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+
+                {# Stickers #}
+                {% for sticker in msg.stickers %}
+                <div class="chatlog__sticker" title="{{ sticker.name }}">
+                    {% if sticker.is_image %}
+                    <img class="chatlog__sticker--media" src="{{ sticker.url }}" alt="Sticker">
+                    {% elif sticker.is_lottie %}
+                    <div class="chatlog__sticker--media" data-source="{{ sticker.url }}"></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                {# Reactions #}
+                {% if msg.reactions %}
+                <div class="chatlog__reactions">
+                    {% for reaction in msg.reactions %}
+                    <div class="chatlog__reaction" title="{{ reaction.code }}">
+                        <img class="chatlog__emoji chatlog__emoji--small" alt="{{ reaction.name }}" src="{{ reaction.url }}" loading="lazy">
+                        <span class="chatlog__reaction-count">{{ reaction.count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+{% endfor %}
+</div>
