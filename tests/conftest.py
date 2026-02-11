@@ -53,7 +53,7 @@ class MockDiscordClient:
     async def get_roles(self, guild_id: Snowflake) -> list[Role]:
         return self._roles
 
-    async def try_get_member(
+    async def get_member(
         self, guild_id: Snowflake, user_id: Snowflake
     ) -> Member | None:
         member = self._members.get(user_id)

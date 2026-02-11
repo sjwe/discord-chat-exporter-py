@@ -92,7 +92,7 @@ class ExportContext:
             self._members.move_to_end(member_id)
             return
 
-        member = await self.discord.try_get_member(self.request.guild.id, member_id)
+        member = await self.discord.get_member(self.request.guild.id, member_id)
 
         if member is None and fallback_user is not None:
             member = Member.create_fallback(fallback_user)

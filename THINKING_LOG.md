@@ -736,3 +736,46 @@ Three open issues remained: #5 (token security), #6 (unbounded member cache), #1
 - All 701 tests pass
 - All 3 remaining GitHub issues resolved
 - REVIEW.md resolution status: **23 of 23 issues fixed**
+
+---
+
+## 2026-02-11: Mock/Production Method Name Mismatch Bug (Session 11)
+
+### Bug: `AttributeError: 'DiscordClient' object has no attribute 'try_get_member'`
+
+**Symptom:** Runtime crash in `ExportContext._populate_member()` when calling `self.discord.try_get_member()` — the real `DiscordClient` only has `get_member()`.
+
+**Root cause:** A naming mismatch introduced during initial implementation. The code in `context.py:95` called `self.discord.try_get_member()`, but the actual `DiscordClient` method (in `client.py:451`) is named `get_member()`. Both return `Member | None`, so the signatures were identical — only the name was wrong.
+
+### Why Tests Didn't Catch It
+
+The `MockDiscordClient` in `conftest.py:56` was written with the same wrong name (`try_get_member`). Since the mock was duck-typed (not a subclass of `DiscordClient`), there was no interface validation to flag the mismatch. The tests exercised the mock — not the real client — so they all passed despite the production code being broken.
+
+This is a textbook example of **consistent errors in test doubles**: when both the production code and the mock share the same typo, tests provide a false sense of correctness.
+
+**Contributing factors:**
+- Duck-typed mock with no interface enforcement (no ABC, no `Protocol`, no subclass)
+- The name `try_get_member` is plausible (follows a common .NET naming convention from the C# source)
+- The Session 7 thinking log even noted the wrong name: *"`ExportContext` calls `self.discord.try_get_member()` but `DiscordClient` only has `get_member()`. The mock client must provide `try_get_member` to match."* — the conclusion was to match the mock to the buggy code rather than fix the code to match the client
+
+### Fix Applied
+
+**3 files changed:**
+
+1. **`core/exporting/context.py:95`** — `self.discord.try_get_member()` → `self.discord.get_member()`
+2. **`conftest.py:56`** — `MockDiscordClient.try_get_member()` → `MockDiscordClient.get_member()`
+3. **`test_export_pipeline.py`** — Updated `client.try_get_member` references in the member cache test to `client.get_member` (3 occurrences). Left `ctx.try_get_member()` calls unchanged — that's a different method on `ExportContext`, not the client.
+
+**Note:** `ExportContext.try_get_member()` (context.py:109) is a separate local lookup method that returns cached members. This name is correct and was not changed.
+
+### Lesson
+
+Duck-typed mocks are convenient but dangerous when method names can drift from the real interface. Options to prevent this class of bug:
+- Use `unittest.mock.create_autospec(DiscordClient)` to auto-validate method names
+- Define a `Protocol` or ABC for the client interface and type-check the mock
+- Add a smoke test that instantiates the real class (even if mocked at the HTTP layer)
+
+### Results
+
+- All 102 export pipeline tests pass
+- No behavior change — `get_member()` has the same signature and semantics as the mock's `try_get_member()`

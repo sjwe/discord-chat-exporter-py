@@ -529,16 +529,16 @@ class TestExportContextMembers:
         req = _request(is_utc=True)
         ctx = ExportContext(client, req)
 
-        # Wrap try_get_member to count calls
-        original = client.try_get_member
+        # Wrap get_member to count calls
+        original = client.get_member
         call_count = 0
 
-        async def counting_try_get_member(guild_id, user_id):
+        async def counting_get_member(guild_id, user_id):
             nonlocal call_count
             call_count += 1
             return await original(guild_id, user_id)
 
-        client.try_get_member = counting_try_get_member
+        client.get_member = counting_get_member
 
         await ctx.populate_member(user)
         await ctx.populate_member(user)
@@ -557,7 +557,7 @@ class TestExportContextMembers:
         assert member.user.id == Snowflake(2002)
 
     @pytest.mark.asyncio
-    async def test_try_get_member_returns_none_if_not_populated(self):
+    async def test_get_member_returns_none_if_not_populated(self):
         ctx = _context()
         assert ctx.try_get_member(Snowflake(9999)) is None
 
