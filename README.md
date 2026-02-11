@@ -12,6 +12,7 @@ A CLI tool to export Discord chat logs to a file. Python port of [DiscordChatExp
 - Discord markdown rendering (bold, italic, code, mentions, emoji, timestamps, etc.)
 - Parallel channel exports
 - Rate-limit handling with automatic retry
+- MCP server mode for LLM integration (STDIO + HTTP transports)
 
 ## Requirements
 
@@ -150,6 +151,52 @@ Operators:
 
 Example: `from:alice has:image | (from:bob -has:link)`
 
+## MCP Server Mode
+
+The MCP (Model Context Protocol) server allows LLMs to programmatically query Discord data. It exposes 4 tools and supports both STDIO and HTTP transports.
+
+### Running the MCP server
+
+```bash
+# STDIO transport (default, for MCP client integration)
+DISCORD_TOKEN="your-token" python -m discord_chat_exporter.mcp
+
+# HTTP transport
+DISCORD_TOKEN="your-token" python -m discord_chat_exporter.mcp --transport http --port 8000
+
+# Via installed script
+DISCORD_TOKEN="your-token" discord-chat-exporter-mcp
+```
+
+### Adding to Claude Code
+
+```bash
+claude mcp add --transport stdio -e DISCORD_TOKEN=your-token \
+  -- discord-chat-exporter uv run python -m discord_chat_exporter.mcp
+```
+
+### MCP Tools
+
+| Tool | Parameters | Returns |
+|------|-----------|---------|
+| `list_guilds` | none | List of `{id, name}` for all accessible guilds |
+| `list_channels` | `guild_id` | List of `{id, name, kind, topic, parent_id, parent_name}` |
+| `list_dm_channels` | none | List of `{id, name}` for DM channels |
+| `get_messages` | `channel_id`, `format`, `after`, `before`, `filter`, `max_words` | Formatted message text |
+
+### get_messages parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `channel_id` | required | Discord channel ID |
+| `format` | `"plaintext"` | Output format: `plaintext`, `json`, or `csv` |
+| `after` | `null` | Only messages after this ISO date or snowflake ID |
+| `before` | `null` | Only messages before this ISO date or snowflake ID |
+| `filter` | `null` | Filter DSL expression (e.g. `"from:user has:image"`) |
+| `max_words` | `4000` | Approximate word cap on response size |
+
+When `max_words` is exceeded, output is properly closed (valid JSON/CSV) with a truncation note. Use the `after` parameter with the last message timestamp to paginate.
+
 ## Running with Python module
 
 ```bash
@@ -178,6 +225,9 @@ uv run mypy .
 ```
 discord_chat_exporter/
   cli/app.py                  # Click CLI commands
+  mcp/
+    server.py                 # MCP server with 4 tools (FastMCP)
+    __main__.py               # Entry point: python -m discord_chat_exporter.mcp
   core/
     discord/
       client.py               # Async Discord API client

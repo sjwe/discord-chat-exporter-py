@@ -950,3 +950,34 @@ DISCORD_TOKEN=xxx python -m discord_chat_exporter.mcp --transport http --port 80
 # Via installed script
 DISCORD_TOKEN=xxx discord-chat-exporter-mcp --transport http
 ```
+
+---
+
+## 2026-02-11: MCP Server Registration & Docs (Session 14)
+
+### Adding MCP Server to Claude Code
+
+Registered the MCP server with Claude Code for live testing:
+
+```bash
+claude mcp add --transport stdio -e "DISCORD_TOKEN=$DISCORD_TOKEN" \
+  -- discord-chat-exporter uv run --directory /Users/si/Documents/code/tools/discord_chat_exporter-py \
+  python -m discord_chat_exporter.mcp
+```
+
+Key details:
+- `--directory` flag ensures `uv run` finds the project regardless of working directory
+- `DISCORD_TOKEN` passed via `-e` flag so it's available as an env var to the server process
+- Server confirmed connected via `claude mcp get discord-chat-exporter`
+
+### README Updates
+
+Added MCP server documentation to README.md:
+- Added "MCP server mode for LLM integration" to Features list
+- New "MCP Server Mode" section with:
+  - Running instructions (STDIO, HTTP, installed script)
+  - Claude Code integration command
+  - Tool reference table (4 tools with params and return types)
+  - `get_messages` parameter table with defaults and descriptions
+  - Truncation/pagination behavior
+- Updated Project Structure to include `mcp/` directory
