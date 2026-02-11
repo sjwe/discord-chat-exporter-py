@@ -779,3 +779,174 @@ Duck-typed mocks are convenient but dangerous when method names can drift from t
 
 - All 102 export pipeline tests pass
 - No behavior change — `get_member()` has the same signature and semantics as the mock's `try_get_member()`
+
+---
+
+## 2026-02-11: MCP Server Mode Planning (Session 12)
+
+### Goal
+
+Add an MCP (Model Context Protocol) server mode so LLMs can programmatically list guilds/channels and retrieve messages from Discord. The server should support both STDIO and HTTP transports, return data inline (not to files), and cap response size via a `max_words` parameter.
+
+### User Requirements Gathered
+
+Through clarifying questions, established:
+
+1. **Tools**: Read-only listing + `get_messages` with inline return (no file-based export)
+2. **Formats**: JSON, plaintext, CSV (no HTML — not useful for LLM consumption)
+3. **Return mode**: Inline with `max_words` parameter for approximate token mapping. When exceeded, output is properly closed with truncation note.
+4. **Auth**: `DISCORD_TOKEN` env var only (simplest, most secure)
+
+### Architecture Decision: Reuse Existing Writers
+
+The existing `MessageWriter` subclasses (PlainText, JSON, CSV) write to `IO[bytes]` streams. By passing a `BytesIO` buffer instead of a file handle, we can reuse the exact same formatting logic and return the buffer contents as a string. This is better than writing new serialization because:
+
+- Consistent output between CLI and MCP modes
+- No duplicated formatting logic to maintain
+- Writers only touch the stream they're given — no file system dependency
+
+The `ExportContext` + `ExportRequest` plumbing is required by the writers for member/role resolution, markdown formatting, etc. Creating them with a dummy `output_path` is fine since writers never access the path directly — only `MessageExporter` uses it for file creation, which we bypass entirely.
+
+### Word Counting Strategy
+
+After each `writer.write_message()` call, count words in the accumulated buffer via `len(buffer.getvalue().decode().split())`. When the budget is exceeded:
+
+- Stop fetching more messages
+- Call `writer.write_postamble()` to properly close the output (valid JSON, etc.)
+- Append a truncation note (e.g., `"truncated": true` for JSON, text note for plaintext/CSV)
+
+This ensures output is always valid regardless of where truncation occurs.
+
+### DiscordClient Lifecycle
+
+The `DiscordClient` is an async context manager with lazy httpx session creation (`_get_client()` creates it on first use). For the MCP server:
+
+- Store as a module-level lazy singleton
+- Created on first tool call from `DISCORD_TOKEN` env var
+- Token kind (user vs bot) auto-resolved on first API request
+- No explicit shutdown needed — httpx handles cleanup
+
+```python
+_discord_client: DiscordClient | None = None
+
+async def _get_discord_client() -> DiscordClient:
+    global _discord_client
+    if _discord_client is None:
+        token = os.environ.get("DISCORD_TOKEN")
+        if not token:
+            raise ValueError("DISCORD_TOKEN environment variable is required")
+        _discord_client = DiscordClient(token)
+    return _discord_client
+```
+
+### FastMCP Framework Choice
+
+Evaluated the MCP server options:
+- `mcp` (official Anthropic SDK) — includes `mcp.server.fastmcp.FastMCP` but less HTTP transport features
+- `fastmcp` (standalone, v2.x) — better HTTP transport, more docs, `mcp.run(transport="http"|"stdio")`
+
+Chose `fastmcp>=2.0` for its cleaner transport switching. The server definition is simple:
+
+```python
+from fastmcp import FastMCP
+mcp = FastMCP(name="discord-chat-exporter")
+
+@mcp.tool
+async def get_messages(channel_id: str, format: str = "plaintext", ...) -> str:
+    ...
+
+if __name__ == "__main__":
+    mcp.run()  # STDIO by default, or mcp.run(transport="http", port=8000)
+```
+
+### Tool Design
+
+| Tool | Params | Returns |
+|------|--------|---------|
+| `list_guilds` | none | `[{id, name}]` |
+| `list_channels` | `guild_id: str` | `[{id, name, kind, topic}]` |
+| `list_dm_channels` | none | `[{id, name}]` |
+| `get_messages` | `channel_id, format, after, before, filter, max_words` | formatted string |
+
+`get_messages` is the core tool — it wires together the Discord client, export context, message iteration, filtering, writer, and word counting into a single inline response.
+
+### Files to Create/Modify
+
+**New:**
+- `discord_chat_exporter/mcp/__init__.py`
+- `discord_chat_exporter/mcp/server.py` — FastMCP server with 4 tools
+- `discord_chat_exporter/mcp/__main__.py` — entry point with `--transport` / `--port` flags
+
+**Modified:**
+- `pyproject.toml` — add `fastmcp>=2.0` dep + `discord-chat-exporter-mcp` script entry point
+
+### Key Existing Code Being Reused
+
+| Component | Path |
+|-----------|------|
+| `DiscordClient` | `core/discord/client.py` |
+| `Snowflake` | `core/discord/snowflake.py` |
+| `ExportContext` | `core/exporting/context.py` |
+| `ExportRequest` | `core/exporting/request.py` |
+| `PlainTextMessageWriter` | `core/exporting/writers/plaintext.py` |
+| `JsonMessageWriter` | `core/exporting/writers/json.py` |
+| `CsvMessageWriter` | `core/exporting/writers/csv.py` |
+| `parse_message_filter` | `core/exporting/filtering/parser.py` |
+| `ExportFormat` | `core/exporting/format.py` |
+
+---
+
+## 2026-02-11: MCP Server Implementation (Session 13)
+
+### Phase 9: MCP Server Mode — COMPLETE
+
+Implemented the MCP server based on the plan from Session 12.
+
+### Files Created
+
+**`discord_chat_exporter/mcp/__init__.py`** — Empty package init.
+
+**`discord_chat_exporter/mcp/server.py`** — FastMCP server with 4 tools:
+
+- `list_guilds()` → `list[dict]` — Calls `client.get_guilds()`, returns `[{id, name}]`
+- `list_channels(guild_id)` → `list[dict]` — Calls `client.get_channels()`, returns `[{id, name, kind, topic, parent_id, parent_name}]`
+- `list_dm_channels()` → `list[dict]` — Calls `client.get_dm_channels()`, returns `[{id, name}]`
+- `get_messages(channel_id, format, after, before, filter, max_words)` → `str` — Full export pipeline with BytesIO buffer
+
+Key implementation details:
+- Lazy singleton `_discord_client` created from `DISCORD_TOKEN` env var on first tool call
+- `_FORMAT_MAP` dict maps format strings to `ExportFormat` enum values
+- `_make_writer()` factory returns the appropriate writer subclass
+- `get_messages` creates `ExportRequest` with dummy `/dev/null` output path, `ExportContext` for member/role caching, then iterates messages through the writer with word-count truncation
+- Word counting: `len(buf.getvalue().decode().split())` after each message write
+- Truncation handling: JSON gets `"truncated": true` field inserted before closing brace; plaintext/CSV get a text note appended
+- Context cleanup in `finally` block
+
+**`discord_chat_exporter/mcp/__main__.py`** — Entry point with `--transport` and `--port` CLI args. Supports `python -m discord_chat_exporter.mcp` invocation.
+
+### Files Modified
+
+**`pyproject.toml`**:
+- Added `fastmcp>=2.0` to dependencies
+- Added `discord-chat-exporter-mcp` script entry point pointing to `discord_chat_exporter.mcp.__main__:main`
+
+### Verification
+
+- `uv sync` installed fastmcp 2.14.5 with 67 transitive dependencies
+- Module import verified: `from discord_chat_exporter.mcp.server import mcp` loads successfully, 4 tools registered
+- Entry point verified: `from discord_chat_exporter.mcp.__main__ import main` loads successfully
+- All 701 existing tests pass (no regressions)
+- `ruff check` passes on all new files (fixed one UP032 lint: `.format()` → f-string)
+
+### Usage
+
+```bash
+# STDIO transport (default, for MCP client integration)
+DISCORD_TOKEN=xxx python -m discord_chat_exporter.mcp
+
+# HTTP transport (for remote access)
+DISCORD_TOKEN=xxx python -m discord_chat_exporter.mcp --transport http --port 8000
+
+# Via installed script
+DISCORD_TOKEN=xxx discord-chat-exporter-mcp --transport http
+```

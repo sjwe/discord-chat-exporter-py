@@ -11,10 +11,12 @@ dependencies = [
     "jinja2>=3.1",
     "pydantic>=2.5",
     "tenacity>=8.2",
+    "fastmcp>=2.0",
 ]
 
 [project.scripts]
 discord-chat-exporter = "discord_chat_exporter.cli.app:cli"
+discord-chat-exporter-mcp = "discord_chat_exporter.mcp.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

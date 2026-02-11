@@ -249,6 +249,50 @@ Resolved the 3 remaining open GitHub issues (#5, #6, #15):
 
 All 701 tests pass. **All 23 review issues resolved.**
 
+### Phase 9: MCP Server Mode
+
+Add an MCP (Model Context Protocol) server so LLMs can programmatically query Discord data. Uses FastMCP with both STDIO and HTTP transports.
+
+**New dependency:** `fastmcp>=2.0`
+
+**New files:**
+
+| File | Purpose |
+|------|---------|
+| `discord_chat_exporter/mcp/__init__.py` | Package init |
+| `discord_chat_exporter/mcp/server.py` | FastMCP server with 4 tools |
+| `discord_chat_exporter/mcp/__main__.py` | Entry: `python -m discord_chat_exporter.mcp` |
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `pyproject.toml` | Add `fastmcp>=2.0` dep + `discord-chat-exporter-mcp` entry point |
+
+**MCP Tools:**
+
+1. `list_guilds()` → `list[dict]` — List accessible guilds
+2. `list_channels(guild_id)` → `list[dict]` — List channels in a guild
+3. `list_dm_channels()` → `list[dict]` — List DM channels
+4. `get_messages(channel_id, format, after, before, filter, max_words)` → `str` — Retrieve messages inline
+
+**Design decisions:**
+- **No file export** — all data returned inline in tool responses
+- **Formats:** JSON, plaintext, CSV (no HTML — not useful for LLM consumption)
+- **Word cap:** `max_words` parameter (default 4000) caps response size for approximate token control. When exceeded, output is properly closed (valid JSON/CSV) with truncation note.
+- **Auth:** `DISCORD_TOKEN` env var only (most secure, simplest)
+- **Client lifecycle:** Lazy singleton `DiscordClient` created on first tool call, reused across requests
+- **Reuses existing writers** with `BytesIO` stream — same output format as CLI exports, just returned as string instead of written to file
+
+**`get_messages` implementation:**
+1. Fetch channel + guild via `DiscordClient`
+2. Parse after/before as `Snowflake`, filter via `parse_message_filter()`
+3. Create `ExportRequest` (dummy output_path), `ExportContext`
+4. Create appropriate `MessageWriter` (PlainText/JSON/CSV) with `BytesIO` stream
+5. Write preamble, iterate messages with filter, write each message
+6. Count words after each write; stop when `max_words` exceeded
+7. Write postamble, return buffer as UTF-8 string
+
 ---
 
 ## Verification
@@ -259,9 +303,12 @@ All 701 tests pass. **All 23 review issues resolved.**
 4. **Media test**: Run with `--media` flag, verify assets downloaded and referenced correctly in HTML
 5. **Filter test**: Run with `--filter "from:username"` and `--filter "has:attachments"`, verify correct filtering
 6. **Partition test**: Run with `--partition 10` and `--partition 1mb`, verify file splitting
+7. **MCP STDIO**: `DISCORD_TOKEN=xxx python -m discord_chat_exporter.mcp` — connect with MCP client
+8. **MCP HTTP**: `DISCORD_TOKEN=xxx python -m discord_chat_exporter.mcp --transport http --port 8000`
+9. **MCP tools**: Test `list_guilds`, `list_channels`, `get_messages` (with format, filter, max_words)
 
 ---
 
 ## Final Status
 
-**All implementation phases complete. All 23 code review issues resolved. 701 tests passing.**
+**Phases 1-9 complete. All 23 code review issues resolved. 701 tests passing. MCP server implemented.**
